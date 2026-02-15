@@ -276,12 +276,16 @@ from flask import Flask
 
 app = Flask(__name__)
 
+def get_latency():
+    return round(client.latency * 1000)
+
 def get_server_count():
     return len(client.guilds)
 
 @app.route("/")
 def home():
     servers = get_server_count()
+    latency = get_latency()
 
     return f"""
     <html>
@@ -292,9 +296,11 @@ def home():
         <h1>Fun Fact Bot Dashboard</h1>
         <p>Bot Status: ✅ Online</p>
         <p>Servers: {servers}</p>
+        <p>Ping: {latency} ms</p>
     </body>
     </html>
     """
+
 
 
 import threading
@@ -305,6 +311,7 @@ def run_bot():
 bot_thread = threading.Thread(target=run_bot)
 bot_thread.daemon = True
 bot_thread.start()
+
 
 
 
