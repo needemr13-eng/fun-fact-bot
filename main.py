@@ -265,41 +265,51 @@ async def togglelevels(interaction: discord.Interaction):
 
     status = "enabled" if new_value else "disabled"
     await interaction.response.send_message(f"Level messages {status}.")
+bot_stats = {
+    "servers": 0,
+    "users": 0,
+    "latency": "..."
+}
 
 @client.event
 async def on_ready():
     await tree.sync()
+
+    bot_stats["servers"] = len(client.guilds)
+
+    total_users = 0
+    for g in client.guilds:
+        if g.member_count:
+            total_users += g.member_count
+
+    bot_stats["users"] = total_users
+    bot_stats["latency"] = round(client.latency * 1000)
+
     print(f"Logged in as {client.user}")
+   
+    @tasks.loop(seconds=10)
+async def update_stats():
+    bot_stats["servers"] = len(client.guilds)
 
-import threading
-from flask import Flask
+    total_users = 0
+    for g in client.guilds:
+        if g.member_count:
+            total_users += g.member_count
 
-app = Flask(__name__)
+    bot_stats["users"] = total_users
 
-def get_latency():
-    return round(client.latency * 1000)
+    lat = client.latency
+    if lat == lat:
+        bot_stats["latency"] = round(lat * 1000)
 
-def get_server_count():
-    return len(client.guilds)
+@client.event
+async def on_connect():
+    update_stats.start()
+
+
 
 @app.route("/")
 def home():
-    # Server count
-    servers = len(client.guilds)
-
-    # Safe latency check (prevents NaN crash)
-    lat = client.latency
-    if lat != lat:  # detects NaN
-        latency = "..."
-    else:
-        latency = round(lat * 1000)
-
-    # Total users across all servers
-    users = 0
-    for g in client.guilds:
-        if g.member_count is not None:
-            users += g.member_count
-
     return f"""
     <html>
     <head>
@@ -319,14 +329,16 @@ def home():
             <h1 style="color:#5865F2;">Fun Fact Bot</h1>
             <p>✅ Online</p>
             <hr style="border:1px solid #3a3c42;">
-            <p><b>Servers:</b> {servers}</p>
-            <p><b>Users:</b> {users}</p>
-            <p><b>Ping:</b> {latency} ms</p>
+            <p><b>Servers:</b> {bot_stats["servers"]}</p>
+            <p><b>Users:</b> {bot_stats["users"]}</p>
+            <p><b>Ping:</b> {bot_stats["latency"]} ms</p>
         </div>
 
     </body>
     </html>
     """
+
+
 
 
 
