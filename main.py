@@ -285,8 +285,12 @@ def get_server_count():
 @app.route("/")
 def home():
     servers = len(client.guilds)
-latency = round(client.latency * 1000)
-users = sum(g.member_count for g in client.guilds if g.member_count)
+    latency = round(client.latency * 1000)
+
+    users = 0
+    for g in client.guilds:
+        if g.member_count is not None:
+            users += g.member_count
 
     return f"""
     <html>
@@ -315,19 +319,6 @@ users = sum(g.member_count for g in client.guilds if g.member_count)
     </body>
     </html>
     """
-
-
-
-
-
-import threading
-
-def run_bot():
-    client.run(TOKEN)
-
-bot_thread = threading.Thread(target=run_bot)
-bot_thread.daemon = True
-bot_thread.start()
 
 
 
