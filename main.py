@@ -310,6 +310,21 @@ def home():
         </div>
     </body>
     </html>
+    def run_bot():
+    client.run(TOKEN)
+
+def run_web():
+    port = int(os.environ.get("PORT", 8080))
+    app.run(host="0.0.0.0", port=port)
+
+if __name__ == "__main__":
+    bot_thread = threading.Thread(target=run_bot)
+    bot_thread.daemon = True
+    bot_thread.start()
+
+    run_web()
+
     """
+
 
 
