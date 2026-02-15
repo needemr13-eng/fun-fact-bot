@@ -310,7 +310,9 @@ def home():
         </div>
     </body>
     </html>
-    def run_bot():
+    """
+
+def run_bot():
     client.run(TOKEN)
 
 def run_web():
@@ -324,7 +326,6 @@ if __name__ == "__main__":
 
     run_web()
 
-    """
 
 
 
