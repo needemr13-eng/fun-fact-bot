@@ -404,3 +404,25 @@ if __name__ == "__main__":
     threading.Thread(target=run_bot, daemon=True).start()
     run_web()
 
+# =========================
+# RUN BOT + WEB SERVER
+# =========================
+
+def run_bot():
+    if not TOKEN:
+        print("TOKEN IS MISSING!")
+        return
+    print("Starting Discord bot...")
+    client.run(TOKEN)
+
+def run_web():
+    port = int(os.environ.get("PORT", 8080))
+    print("Starting Flask on port", port)
+    app.run(host="0.0.0.0", port=port)
+
+if __name__ == "__main__":
+    threading.Thread(target=run_bot, daemon=True).start()
+    run_web()
+
+
+
