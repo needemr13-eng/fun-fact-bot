@@ -228,39 +228,45 @@ def dashboard():
     <head>
         <title>Fun Fact Bot Dashboard</title>
         <meta http-equiv="refresh" content="15">
+        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
         <style>
             body {{
                 margin: 0;
-                font-family: 'Segoe UI', sans-serif;
+                font-family: 'Inter', sans-serif;
                 background: #0f1117;
                 color: white;
                 display: flex;
             }}
 
             .sidebar {{
-                width: 240px;
-                background: #181c25;
+                width: 250px;
+                background: #151822;
                 height: 100vh;
-                padding: 25px;
+                padding: 30px;
+                box-shadow: 5px 0 20px rgba(0,0,0,0.4);
             }}
 
-            .sidebar h2 {{
-                color: #5865F2;
-                margin-bottom: 30px;
+            .logo {{
+                font-size: 22px;
+                font-weight: 700;
+                background: linear-gradient(90deg, #5865F2, #9b59ff);
+                -webkit-background-clip: text;
+                -webkit-text-fill-color: transparent;
+                margin-bottom: 40px;
             }}
 
             .sidebar a {{
                 display: block;
-                color: #ccc;
                 text-decoration: none;
-                padding: 10px;
-                border-radius: 8px;
+                color: #aaa;
+                padding: 12px;
+                border-radius: 10px;
                 margin-bottom: 10px;
                 transition: 0.2s;
             }}
 
             .sidebar a:hover {{
-                background: #2a2f3a;
+                background: #1f2330;
                 color: white;
             }}
 
@@ -269,40 +275,80 @@ def dashboard():
                 padding: 40px;
             }}
 
-            .title {{
+            .topbar {{
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                margin-bottom: 40px;
+            }}
+
+            .topbar h1 {{
                 font-size: 28px;
-                margin-bottom: 30px;
+                margin: 0;
+            }}
+
+            .status {{
+                padding: 8px 15px;
+                background: #1f2330;
+                border-radius: 20px;
+                font-size: 14px;
+                color: #4CAF50;
             }}
 
             .cards {{
                 display: flex;
-                gap: 25px;
+                gap: 30px;
                 flex-wrap: wrap;
             }}
 
             .card {{
-                background: #181c25;
+                background: #151822;
                 padding: 30px;
-                border-radius: 15px;
-                width: 230px;
-                box-shadow: 0 0 20px rgba(0,0,0,0.4);
-                transition: 0.2s;
+                border-radius: 18px;
+                width: 260px;
+                box-shadow: 0 0 25px rgba(0,0,0,0.5);
+                transition: 0.25s ease;
+                position: relative;
+                overflow: hidden;
+            }}
+
+            .card::before {{
+                content: "";
+                position: absolute;
+                top: -50%;
+                left: -50%;
+                width: 200%;
+                height: 200%;
+                background: radial-gradient(circle, rgba(88,101,242,0.15) 0%, transparent 60%);
+                transform: rotate(25deg);
             }}
 
             .card:hover {{
-                transform: translateY(-5px);
+                transform: translateY(-8px);
+                box-shadow: 0 0 35px rgba(88,101,242,0.3);
             }}
 
             .card h3 {{
-                color: #aaa;
                 margin: 0;
-                font-size: 16px;
+                font-size: 15px;
+                color: #888;
+                letter-spacing: 1px;
+                text-transform: uppercase;
             }}
 
             .card p {{
-                font-size: 32px;
-                margin-top: 10px;
-                color: #5865F2;
+                font-size: 38px;
+                margin-top: 15px;
+                font-weight: 700;
+                background: linear-gradient(90deg, #5865F2, #9b59ff);
+                -webkit-background-clip: text;
+                -webkit-text-fill-color: transparent;
+            }}
+
+            .footer {{
+                margin-top: 60px;
+                font-size: 13px;
+                color: #555;
             }}
         </style>
     </head>
@@ -310,13 +356,16 @@ def dashboard():
     <body>
 
         <div class="sidebar">
-            <h2>Fun Fact Bot</h2>
+            <div class="logo">Fun Fact Bot</div>
             <a href="/">🏠 Dashboard</a>
             <a href="/leaderboard">🏆 Leaderboard</a>
         </div>
 
         <div class="main">
-            <div class="title">Dashboard Overview</div>
+            <div class="topbar">
+                <h1>Dashboard Overview</h1>
+                <div class="status">● Online</div>
+            </div>
 
             <div class="cards">
                 <div class="card">
@@ -330,15 +379,20 @@ def dashboard():
                 </div>
 
                 <div class="card">
-                    <h3>Ping</h3>
-                    <p>{latency} ms</p>
+                    <h3>Latency</h3>
+                    <p>{latency}ms</p>
                 </div>
+            </div>
+
+            <div class="footer">
+                Fun Fact Bot © 2026 — Powered by Flask + Discord.py
             </div>
         </div>
 
     </body>
     </html>
     """
+
 
 
 @app.route("/leaderboard")
@@ -372,4 +426,5 @@ def start_bot():
     client.run(TOKEN)
 
 threading.Thread(target=start_bot, daemon=True).start()
+
 
