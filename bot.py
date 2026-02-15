@@ -2,22 +2,21 @@ import discord
 from discord import app_commands
 from discord.ext import tasks
 import requests
-import asyncio
 import os
 import sqlite3
 import random
 import html
-from datetime import datetime
+from datetime import datetime, timedelta
+import math
 
 TOKEN = os.getenv("TOKEN")
 
-# ✅ NO privileged intents (no more crashing)
 intents = discord.Intents.default()
 client = discord.Client(intents=intents)
 tree = app_commands.CommandTree(client)
 
 # =========================
-# DATABASE SETUP
+# DATABASE
 # =========================
 
 conn = sqlite3.connect("database.db")
@@ -29,15 +28,21 @@ CREATE TABLE IF NOT EXISTS guild_settings (
     channel_id INTEGER,
     hour INTEGER DEFAULT 7,
     minute INTEGER DEFAULT 30,
-    enabled INTEGER DEFAULT 0
+    enabled INTEGER DEFAULT 0,
+    level_channel_id INTEGER,
+    levels_enabled INTEGER DEFAULT 1
 )
 """)
 
 cursor.execute("""
-CREATE TABLE IF NOT EXISTS leaderboard (
+CREATE TABLE IF NOT EXISTS economy (
     guild_id INTEGER,
     user_id INTEGER,
-    points INTEGER DEFAULT 0,
+    coins INTEGER DEFAULT 0,
+    xp INTEGER DEFAULT 0,
+    level INTEGER DEFAULT 1,
+    streak INTEGER DEFAULT 0,
+    last_daily TEXT,
     PRIMARY KEY (guild_id, user_id)
 )
 """)
@@ -45,200 +50,225 @@ CREATE TABLE IF NOT EXISTS leaderboard (
 conn.commit()
 
 # =========================
-# UTIL FUNCTIONS
+# XP SYSTEM
 # =========================
 
-def get_fun_fact():
-    try:
-        r = requests.get("https://uselessfacts.jsph.pl/random.json?language=en")
-        return r.json()["text"]
-    except:
-        return "Fun fact machine broke 🤖"
+def xp_needed(level):
+    return int(100 * (level ** 1.5))
 
-def get_trivia_question():
+def create_xp_bar(current_xp, level):
+    needed = xp_needed(level)
+    ratio = min(current_xp / needed, 1)
+    filled = int(ratio * 10)
+    return "▰" * filled + "▱" * (10 - filled)
+
+def add_xp(guild_id, user_id, amount):
+    cursor.execute("""
+    INSERT INTO economy (guild_id, user_id, xp)
+    VALUES (?, ?, ?)
+    ON CONFLICT(guild_id, user_id)
+    DO UPDATE SET xp = xp + ?
+    """, (guild_id, user_id, amount, amount))
+    conn.commit()
+
+    cursor.execute("SELECT xp, level FROM economy WHERE guild_id=? AND user_id=?",
+                   (guild_id, user_id))
+    xp, level = cursor.fetchone()
+
+    leveled_up = False
+
+    while xp >= xp_needed(level):
+        xp -= xp_needed(level)
+        level += 1
+        leveled_up = True
+
+    cursor.execute("""
+    UPDATE economy SET xp=?, level=? WHERE guild_id=? AND user_id=?
+    """, (xp, level, guild_id, user_id))
+    conn.commit()
+
+    return leveled_up, level, xp
+
+def add_coins(guild_id, user_id, amount):
+    cursor.execute("""
+    INSERT INTO economy (guild_id, user_id, coins)
+    VALUES (?, ?, ?)
+    ON CONFLICT(guild_id, user_id)
+    DO UPDATE SET coins = coins + ?
+    """, (guild_id, user_id, amount, amount))
+    conn.commit()
+
+# =========================
+# TRIVIA
+# =========================
+
+def get_trivia():
     try:
         r = requests.get("https://opentdb.com/api.php?amount=1&type=multiple")
         data = r.json()["results"][0]
-
         question = html.unescape(data["question"])
         correct = html.unescape(data["correct_answer"])
         incorrect = [html.unescape(i) for i in data["incorrect_answers"]]
-
         options = incorrect + [correct]
         random.shuffle(options)
-
         return question, correct, options
     except:
         return None, None, None
 
-def add_points(guild_id, user_id):
-    cursor.execute("""
-    INSERT INTO leaderboard (guild_id, user_id, points)
-    VALUES (?, ?, 1)
-    ON CONFLICT(guild_id, user_id)
-    DO UPDATE SET points = points + 1
-    """, (guild_id, user_id))
-    conn.commit()
-
-# =========================
-# DAILY FACT LOOP
-# =========================
-
-@tasks.loop(minutes=1)
-async def daily_fact_loop():
-    now = datetime.utcnow()
-
-    cursor.execute("SELECT guild_id, channel_id, hour, minute FROM guild_settings WHERE enabled = 1")
-    rows = cursor.fetchall()
-
-    for guild_id, channel_id, hour, minute in rows:
-        if now.hour == hour and now.minute == minute:
-            channel = client.get_channel(channel_id)
-            if channel:
-                await channel.send(f"🌟 **Daily Fun Fact** 🌟\n\n{get_fun_fact()}")
-
-# =========================
-# EVENTS
-# =========================
-
-@client.event
-async def on_ready():
-    await tree.sync()
-    print(f"Logged in as {client.user}")
-    if not daily_fact_loop.is_running():
-        daily_fact_loop.start()
-
-# =========================
-# FUN COMMANDS
-# =========================
-
-@tree.command(name="fact", description="Get a random fun fact!")
-async def fact(interaction: discord.Interaction):
-    await interaction.response.send_message(f"🌟 {get_fun_fact()}")
-
 @tree.command(name="trivia", description="Start a trivia question!")
 async def trivia(interaction: discord.Interaction):
-    question, correct, options = get_trivia_question()
+    question, correct, options = get_trivia()
 
     if not question:
-        await interaction.response.send_message("Trivia API failed 😭")
+        await interaction.response.send_message("Trivia failed 😭")
         return
 
     view = discord.ui.View(timeout=30)
 
     for option in options:
-        async def button_callback(interaction2: discord.Interaction, opt=option):
+        async def callback(interaction2: discord.Interaction, opt=option):
             if opt == correct:
-                add_points(interaction.guild_id, interaction2.user.id)
-                await interaction2.response.send_message("✅ Correct! +1 point", ephemeral=True)
+                add_coins(interaction.guild_id, interaction2.user.id, 1)
+                leveled, level, xp = add_xp(interaction.guild_id, interaction2.user.id, 15)
+
+                await interaction2.response.send_message("✅ Correct! +1 coin +15 XP", ephemeral=True)
+
+                if leveled:
+                    await send_level_up(interaction.guild_id, interaction2.user, level, xp)
             else:
-                await interaction2.response.send_message(f"❌ Wrong! Correct answer: {correct}", ephemeral=True)
+                await interaction2.response.send_message(
+                    f"❌ Wrong! Correct: {correct}", ephemeral=True)
 
         button = discord.ui.Button(label=option, style=discord.ButtonStyle.primary)
-        button.callback = button_callback
+        button.callback = callback
         view.add_item(button)
 
     await interaction.response.send_message(f"🧠 **Trivia Time!**\n\n{question}", view=view)
 
-@tree.command(name="leaderboard", description="View trivia leaderboard.")
-async def leaderboard(interaction: discord.Interaction):
-    cursor.execute("""
-    SELECT user_id, points FROM leaderboard
-    WHERE guild_id = ?
-    ORDER BY points DESC LIMIT 10
-    """, (interaction.guild_id,))
-    rows = cursor.fetchall()
+# =========================
+# LEVEL UP EMBED
+# =========================
 
-    if not rows:
-        await interaction.response.send_message("No scores yet!")
+async def send_level_up(guild_id, user, level, xp):
+    cursor.execute("""
+    SELECT level_channel_id, levels_enabled FROM guild_settings WHERE guild_id=?
+    """, (guild_id,))
+    result = cursor.fetchone()
+
+    if not result:
         return
 
-    text = ""
-    for i, (user_id, points) in enumerate(rows, start=1):
-        text += f"{i}. <@{user_id}> - {points} pts\n"
+    channel_id, enabled = result
+    if not enabled or not channel_id:
+        return
 
-    await interaction.response.send_message(f"🏆 **Leaderboard** 🏆\n\n{text}")
+    channel = client.get_channel(channel_id)
+    if not channel:
+        return
+
+    bar = create_xp_bar(xp, level)
+
+    embed = discord.Embed(
+        title="🎉 Level Up!",
+        description=f"{user.mention} reached **Level {level}**!",
+        color=discord.Color.gold()
+    )
+    embed.add_field(name="XP Progress", value=f"{bar}", inline=False)
+    embed.set_thumbnail(url=user.display_avatar.url)
+
+    await channel.send(embed=embed)
 
 # =========================
-# ADMIN COMMANDS
+# ECONOMY COMMANDS
 # =========================
 
-@tree.command(name="setchannel", description="Set daily fact channel.")
-@app_commands.checks.has_permissions(administrator=True)
-async def setchannel(interaction: discord.Interaction, channel: discord.TextChannel):
+@tree.command(name="balance", description="Check your balance and level.")
+async def balance(interaction: discord.Interaction):
     cursor.execute("""
-    INSERT INTO guild_settings (guild_id, channel_id)
+    SELECT coins, xp, level FROM economy WHERE guild_id=? AND user_id=?
+    """, (interaction.guild_id, interaction.user.id))
+    data = cursor.fetchone()
+
+    if not data:
+        await interaction.response.send_message("You have nothing yet 😭")
+        return
+
+    coins, xp, level = data
+    bar = create_xp_bar(xp, level)
+
+    embed = discord.Embed(title="💰 Your Stats", color=discord.Color.blue())
+    embed.add_field(name="Coins", value=str(coins))
+    embed.add_field(name="Level", value=str(level))
+    embed.add_field(name="XP", value=bar, inline=False)
+
+    await interaction.response.send_message(embed=embed)
+
+@tree.command(name="daily", description="Claim daily reward.")
+async def daily(interaction: discord.Interaction):
+    cursor.execute("""
+    SELECT last_daily FROM economy WHERE guild_id=? AND user_id=?
+    """, (interaction.guild_id, interaction.user.id))
+    row = cursor.fetchone()
+
+    now = datetime.utcnow()
+
+    if row and row[0]:
+        last = datetime.fromisoformat(row[0])
+        if now - last < timedelta(hours=24):
+            await interaction.response.send_message("Come back later ⏳")
+            return
+
+    add_coins(interaction.guild_id, interaction.user.id, 10)
+
+    cursor.execute("""
+    INSERT INTO economy (guild_id, user_id, last_daily)
+    VALUES (?, ?, ?)
+    ON CONFLICT(guild_id, user_id)
+    DO UPDATE SET last_daily=?
+    """, (interaction.guild_id, interaction.user.id, now.isoformat(), now.isoformat()))
+    conn.commit()
+
+    await interaction.response.send_message("💰 You received 10 coins!")
+
+# =========================
+# ADMIN LEVEL SETTINGS
+# =========================
+
+@tree.command(name="setlevelchannel", description="Set level-up channel.")
+@app_commands.checks.has_permissions(administrator=True)
+async def setlevelchannel(interaction: discord.Interaction, channel: discord.TextChannel):
+    cursor.execute("""
+    INSERT INTO guild_settings (guild_id, level_channel_id)
     VALUES (?, ?)
     ON CONFLICT(guild_id)
-    DO UPDATE SET channel_id = ?
+    DO UPDATE SET level_channel_id=?
     """, (interaction.guild_id, channel.id, channel.id))
     conn.commit()
-    await interaction.response.send_message(f"Daily facts will post in {channel.mention}")
+    await interaction.response.send_message(f"Level-ups will post in {channel.mention}")
 
-@tree.command(name="settime", description="Set daily fact time (UTC).")
+@tree.command(name="togglelevels", description="Enable/Disable level messages.")
 @app_commands.checks.has_permissions(administrator=True)
-async def settime(interaction: discord.Interaction, hour: int, minute: int):
+async def togglelevels(interaction: discord.Interaction):
+    cursor.execute("SELECT levels_enabled FROM guild_settings WHERE guild_id=?",
+                   (interaction.guild_id,))
+    row = cursor.fetchone()
+
+    new_value = 0 if row and row[0] == 1 else 1
+
     cursor.execute("""
-    INSERT INTO guild_settings (guild_id, hour, minute)
-    VALUES (?, ?, ?)
+    INSERT INTO guild_settings (guild_id, levels_enabled)
+    VALUES (?, ?)
     ON CONFLICT(guild_id)
-    DO UPDATE SET hour = ?, minute = ?
-    """, (interaction.guild_id, hour, minute, hour, minute))
+    DO UPDATE SET levels_enabled=?
+    """, (interaction.guild_id, new_value, new_value))
     conn.commit()
-    await interaction.response.send_message(f"Daily fact time set to {hour:02d}:{minute:02d} UTC")
 
-@tree.command(name="enablefacts", description="Enable daily facts.")
-@app_commands.checks.has_permissions(administrator=True)
-async def enablefacts(interaction: discord.Interaction):
-    cursor.execute("""
-    INSERT INTO guild_settings (guild_id, enabled)
-    VALUES (?, 1)
-    ON CONFLICT(guild_id)
-    DO UPDATE SET enabled = 1
-    """, (interaction.guild_id,))
-    conn.commit()
-    await interaction.response.send_message("✅ Daily facts enabled.")
+    status = "enabled" if new_value else "disabled"
+    await interaction.response.send_message(f"Level messages {status}.")
 
-@tree.command(name="disablefacts", description="Disable daily facts.")
-@app_commands.checks.has_permissions(administrator=True)
-async def disablefacts(interaction: discord.Interaction):
-    cursor.execute("UPDATE guild_settings SET enabled = 0 WHERE guild_id = ?", (interaction.guild_id,))
-    conn.commit()
-    await interaction.response.send_message("❌ Daily facts disabled.")
-
-@tree.command(name="resetleaderboard", description="Reset trivia leaderboard.")
-@app_commands.checks.has_permissions(administrator=True)
-async def resetleaderboard(interaction: discord.Interaction):
-    cursor.execute("DELETE FROM leaderboard WHERE guild_id = ?", (interaction.guild_id,))
-    conn.commit()
-    await interaction.response.send_message("Leaderboard reset.")
-
-# =========================
-# UTILITY COMMANDS
-# =========================
-
-@tree.command(name="ping", description="Check bot latency.")
-async def ping(interaction: discord.Interaction):
-    await interaction.response.send_message(f"Pong! {round(client.latency * 1000)}ms")
-
-@tree.command(name="serverinfo", description="Get server info.")
-async def serverinfo(interaction: discord.Interaction):
-    guild = interaction.guild
-    await interaction.response.send_message(
-        f"**{guild.name}**\nMembers: {guild.member_count}\nCreated: {guild.created_at.date()}"
-    )
-
-@tree.command(name="userinfo", description="Get user info.")
-async def userinfo(interaction: discord.Interaction, member: discord.Member = None):
-    member = member or interaction.user
-    await interaction.response.send_message(
-        f"**{member.name}**\nJoined: {member.joined_at.date()}"
-    )
-
-@tree.command(name="stats", description="Bot stats.")
-async def stats(interaction: discord.Interaction):
-    await interaction.response.send_message(
-        f"Servers: {len(client.guilds)}\nUsers: {len(client.users)}"
-    )
+@client.event
+async def on_ready():
+    await tree.sync()
+    print(f"Logged in as {client.user}")
 
 client.run(TOKEN)
