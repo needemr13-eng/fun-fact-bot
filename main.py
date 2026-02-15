@@ -263,49 +263,6 @@ async def togglelevels(interaction: discord.Interaction):
     """, (interaction.guild_id, new_value, new_value))
     conn.commit()
 
-    status = "enabled" if new_value else "disabled"
-    await interaction.response.send_message(f"Level messages {status}.")
-bot_stats = {
-    "servers": 0,
-    "users": 0,
-    "latency": "..."
-}
-
-@client.event
-async def on_ready():
-    await tree.sync()
-
-    bot_stats["servers"] = len(client.guilds)
-
-    total_users = 0
-    for g in client.guilds:
-        if g.member_count:
-            total_users += g.member_count
-
-    bot_stats["users"] = total_users
-    bot_stats["latency"] = round(client.latency * 1000)
-
-    print(f"Logged in as {client.user}")
-   
-    @tasks.loop(seconds=10)
-async def update_stats():
-    bot_stats["servers"] = len(client.guilds)
-
-    total_users = 0
-    for g in client.guilds:
-        if g.member_count:
-            total_users += g.member_count
-
-    bot_stats["users"] = total_users
-
-    lat = client.latency
-    if lat == lat:
-        bot_stats["latency"] = round(lat * 1000)
-
-@client.event
-async def on_connect():
-    update_stats.start()
-
 
 
 @app.route("/")
@@ -337,6 +294,23 @@ def home():
     </body>
     </html>
     """
+    import threading
+
+def run_bot():
+    client.run(TOKEN)
+
+def run_web():
+    port = int(os.environ.get("PORT", 8080))
+    app.run(host="0.0.0.0", port=port)
+
+if __name__ == "__main__":
+    bot_thread = threading.Thread(target=run_bot)
+    bot_thread.daemon = True
+    bot_thread.start()
+
+    run_web()
+
+
 
 
 
