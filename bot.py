@@ -99,6 +99,11 @@ async def wait_until_target_time():
 @client.event
 async def on_ready():
     guild = discord.Object(id=GUILD_ID)
+
+    # Clear old commands first
+    tree.clear_commands(guild=guild)
+
+    # Re-sync everything fresh
     await tree.sync(guild=guild)
 
     print(f"Logged in as {client.user}")
@@ -110,3 +115,4 @@ async def on_ready():
         await asyncio.sleep(60)
 
 client.run(TOKEN)
+
