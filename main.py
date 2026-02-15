@@ -225,23 +225,110 @@ def dashboard():
         latency = "..."
 
     return f"""
+    <!DOCTYPE html>
     <html>
     <head>
         <title>Fun Fact Bot Dashboard</title>
-        <meta http-equiv="refresh" content="10">
+        <meta http-equiv="refresh" content="15">
+        <style>
+            body {{
+                margin: 0;
+                font-family: Arial, sans-serif;
+                background: #0f1117;
+                color: white;
+                display: flex;
+            }}
+
+            .sidebar {{
+                width: 220px;
+                background: #181c25;
+                padding: 20px;
+                height: 100vh;
+            }}
+
+            .sidebar h2 {{
+                color: #5865F2;
+            }}
+
+            .sidebar a {{
+                display: block;
+                color: white;
+                text-decoration: none;
+                margin: 15px 0;
+                padding: 8px;
+                border-radius: 6px;
+            }}
+
+            .sidebar a:hover {{
+                background: #2a2f3a;
+            }}
+
+            .main {{
+                flex: 1;
+                padding: 40px;
+            }}
+
+            .cards {{
+                display: flex;
+                gap: 20px;
+                flex-wrap: wrap;
+            }}
+
+            .card {{
+                background: #181c25;
+                padding: 30px;
+                border-radius: 12px;
+                width: 220px;
+                box-shadow: 0 0 15px rgba(0,0,0,0.4);
+            }}
+
+            .card h3 {{
+                margin: 0;
+                font-size: 18px;
+                color: #aaa;
+            }}
+
+            .card p {{
+                font-size: 28px;
+                margin-top: 10px;
+                color: #5865F2;
+            }}
+
+        </style>
     </head>
-    <body style="background:#111;color:white;font-family:Arial;text-align:center;padding-top:50px;">
-        <h1 style="color:#5865F2;">Fun Fact Bot Dashboard</h1>
-        <p>✅ Online</p>
-        <hr style="width:300px;">
-        <p><b>Servers:</b> {servers}</p>
-        <p><b>Users:</b> {users}</p>
-        <p><b>Ping:</b> {latency} ms</p>
-        <br>
-        <a href="/leaderboard" style="color:#5865F2;">View Global Leaderboard</a>
+
+    <body>
+
+        <div class="sidebar">
+            <h2>Fun Fact Bot</h2>
+            <a href="/">🏠 Dashboard</a>
+            <a href="/leaderboard">🏆 Leaderboard</a>
+        </div>
+
+        <div class="main">
+            <h1>Dashboard Overview</h1>
+            <div class="cards">
+                <div class="card">
+                    <h3>Servers</h3>
+                    <p>{servers}</p>
+                </div>
+
+                <div class="card">
+                    <h3>Users</h3>
+                    <p>{users}</p>
+                </div>
+
+                <div class="card">
+                    <h3>Ping</h3>
+                    <p>{latency} ms</p>
+                </div>
+            </div>
+        </div>
+
     </body>
     </html>
     """
+
 
 @app.route("/leaderboard")
 def web_leaderboard():
@@ -253,29 +340,47 @@ def web_leaderboard():
 
     html_rows = ""
     for i, (uid, level) in enumerate(rows, 1):
-        html_rows += f"<p>{i}. User ID {uid} — Level {level}</p>"
+        html_rows += f"<div class='card'><h3>#{i}</h3><p>User ID {uid}</p><p>Level {level}</p></div>"
 
     return f"""
+    <!DOCTYPE html>
     <html>
-    <body style="background:#111;color:white;font-family:Arial;text-align:center;">
+    <head>
+        <title>Leaderboard</title>
+        <style>
+            body {{
+                margin: 0;
+                font-family: Arial;
+                background: #0f1117;
+                color: white;
+                padding: 40px;
+            }}
+
+            .card {{
+                background: #181c25;
+                padding: 20px;
+                margin: 15px 0;
+                border-radius: 12px;
+                box-shadow: 0 0 10px rgba(0,0,0,0.3);
+            }}
+
+            h1 {{
+                color: #5865F2;
+            }}
+
+            a {{
+                color: #5865F2;
+                text-decoration: none;
+            }}
+        </style>
+    </head>
+
+    <body>
         <h1>Global Leaderboard</h1>
         {html_rows}
-        <br><a href="/">Back</a>
+        <br>
+        <a href="/">⬅ Back to Dashboard</a>
     </body>
     </html>
     """
 
-# =========================
-# RUN BOT + WEB
-# =========================
-
-def run_bot():
-    client.run(TOKEN)
-
-def run_web():
-    port = int(os.environ.get("PORT", 8080))
-    app.run(host="0.0.0.0", port=port)
-
-if __name__ == "__main__":
-    threading.Thread(target=run_bot, daemon=True).start()
-    run_web()
