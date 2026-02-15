@@ -109,13 +109,10 @@ def callback():
         headers={"Authorization": f"Bearer {access_token}"}
     ).json()
 
-    guilds = requests.get(
-        "https://discord.com/api/users/@me/guilds",
-        headers={"Authorization": f"Bearer {access_token}"}
-    ).json()
-
-    session["user"] = user
-    session["guilds"] = guilds
+    # ✅ STORE ONLY SMALL DATA
+    session["user_id"] = user["id"]
+    session["username"] = user["username"]
+    session["access_token"] = access_token
 
     return redirect("/dashboard")
 
@@ -125,16 +122,19 @@ def callback():
 # ------------------------------
 @app.route("/dashboard")
 def dashboard():
-    if "user" not in session:
+    if "access_token" not in session:
         return redirect("/login")
 
-    user = session["user"]
-    guilds = session["guilds"]
+    access_token = session["access_token"]
+
+    guilds = requests.get(
+        "https://discord.com/api/users/@me/guilds",
+        headers={"Authorization": f"Bearer {access_token}"}
+    ).json()
 
     guild_cards = ""
 
     for g in guilds:
-        # MANAGE_GUILD permission
         if int(g["permissions"]) & 0x20:
             guild_cards += f"""
             <div style="background:#151822;padding:20px;margin:15px;border-radius:12px;">
@@ -146,7 +146,7 @@ def dashboard():
     return f"""
     <html>
     <body style="background:#0f1117;color:white;font-family:Arial;padding:40px;">
-        <h1>Welcome {user['username']}</h1>
+        <h1>Welcome {session['username']}</h1>
         <h2>Your Servers</h2>
         {guild_cards}
         <br><br>
@@ -210,3 +210,4 @@ bot_thread.start()
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8080)
+
