@@ -267,6 +267,15 @@ async def togglelevels(interaction: discord.Interaction):
 
 @app.route("/")
 def home():
+    try:
+        servers = len(client.guilds)
+        users = sum(g.member_count for g in client.guilds if g.member_count)
+        latency = round(client.latency * 1000)
+    except:
+        servers = 0
+        users = 0
+        latency = "..."
+
     return f"""
     <html>
     <head>
@@ -274,7 +283,6 @@ def home():
         <meta http-equiv="refresh" content="10">
     </head>
     <body style="background:#1e1f22;color:white;font-family:Arial;text-align:center;padding-top:100px;">
-
         <div style="
             background:#2b2d31;
             display:inline-block;
@@ -286,15 +294,15 @@ def home():
             <h1 style="color:#5865F2;">Fun Fact Bot</h1>
             <p>✅ Online</p>
             <hr style="border:1px solid #3a3c42;">
-            <p><b>Servers:</b> {bot_stats["servers"]}</p>
-            <p><b>Users:</b> {bot_stats["users"]}</p>
-            <p><b>Ping:</b> {bot_stats["latency"]} ms</p>
+            <p><b>Servers:</b> {servers}</p>
+            <p><b>Users:</b> {users}</p>
+            <p><b>Ping:</b> {latency} ms</p>
         </div>
-
     </body>
     </html>
     """
-    import threading
+
+import threading
 
 def run_bot():
     client.run(TOKEN)
@@ -309,6 +317,8 @@ if __name__ == "__main__":
     bot_thread.start()
 
     run_web()
+
+
 
 
 
