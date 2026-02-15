@@ -276,41 +276,26 @@ from flask import Flask
 
 app = Flask(__name__)
 
+def get_server_count():
+    return len(client.guilds)
+
 @app.route("/")
 def home():
-    return """
+    servers = get_server_count()
+
+    return f"""
     <html>
     <head>
         <title>Fun Fact Bot</title>
-        <style>
-            body {
-                background-color: #1e1f22;
-                color: white;
-                font-family: Arial, sans-serif;
-                text-align: center;
-                padding-top: 100px;
-            }
-            .card {
-                background: #2b2d31;
-                padding: 40px;
-                border-radius: 15px;
-                display: inline-block;
-                box-shadow: 0px 0px 20px rgba(0,0,0,0.5);
-            }
-            h1 {
-                color: #5865F2;
-            }
-        </style>
     </head>
-    <body>
-        <div class="card">
-            <h1>Fun Fact Bot Dashboard</h1>
-            <p>Bot Status: ✅ Online</p>
-            <p>Hosted on Railway</p>
-        </div>
+    <body style="background:#1e1f22;color:white;text-align:center;padding-top:100px;">
+        <h1>Fun Fact Bot Dashboard</h1>
+        <p>Bot Status: ✅ Online</p>
+        <p>Servers: {servers}</p>
     </body>
     </html>
     """
+
 
 import threading
 
@@ -320,6 +305,7 @@ def run_bot():
 bot_thread = threading.Thread(target=run_bot)
 bot_thread.daemon = True
 bot_thread.start()
+
 
 
 
