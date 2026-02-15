@@ -21,6 +21,7 @@ TOKEN = os.getenv("TOKEN")
 
 intents = discord.Intents.default()
 intents.members = True
+intents.message_content = True
 
 client = discord.Client(intents=intents)
 tree = app_commands.CommandTree(client)
@@ -43,7 +44,6 @@ CREATE TABLE IF NOT EXISTS economy (
     PRIMARY KEY (guild_id, user_id)
 )
 """)
-
 conn.commit()
 
 # =========================
@@ -73,7 +73,6 @@ def add_xp(guild_id, user_id, amount):
     xp, level = cursor.fetchone()
 
     leveled = False
-
     while xp >= xp_needed(level):
         xp -= xp_needed(level)
         level += 1
@@ -96,10 +95,10 @@ def add_coins(guild_id, user_id, amount):
     conn.commit()
 
 # =========================
-# COMMANDS
+# SLASH COMMANDS
 # =========================
 
-@tree.command(name="balance")
+@tree.command(name="balance", description="Check your balance and XP")
 async def balance(interaction: discord.Interaction):
     cursor.execute("""
     SELECT coins, xp, level FROM economy
@@ -114,14 +113,14 @@ async def balance(interaction: discord.Interaction):
     coins, xp, level = data
     bar = create_bar(xp, level)
 
-    embed = discord.Embed(title="Your Stats", color=discord.Color.blue())
+    embed = discord.Embed(title="Your Stats", color=discord.Color.blurple())
     embed.add_field(name="Coins", value=str(coins))
     embed.add_field(name="Level", value=str(level))
-    embed.add_field(name="XP", value=bar, inline=False)
+    embed.add_field(name="XP Progress", value=bar, inline=False)
 
     await interaction.response.send_message(embed=embed)
 
-@tree.command(name="daily")
+@tree.command(name="daily", description="Claim daily coins")
 async def daily(interaction: discord.Interaction):
     now = datetime.utcnow()
 
@@ -148,9 +147,9 @@ async def daily(interaction: discord.Interaction):
           now.isoformat(), now.isoformat()))
     conn.commit()
 
-    await interaction.response.send_message("You received 25 coins!")
+    await interaction.response.send_message("You received 25 coins! 💰")
 
-@tree.command(name="leaderboard")
+@tree.command(name="leaderboard", description="Server leaderboard")
 async def leaderboard(interaction: discord.Interaction):
     cursor.execute("""
     SELECT user_id, level FROM economy
@@ -168,9 +167,9 @@ async def leaderboard(interaction: discord.Interaction):
         user = await client.fetch_user(uid)
         text += f"{i}. {user.name} — Level {level}\n"
 
-    await interaction.response.send_message(f"🏆 Leaderboard\n\n{text}")
+    await interaction.response.send_message(f"🏆 Server Leaderboard\n\n{text}")
 
-@tree.command(name="trivia")
+@tree.command(name="trivia", description="Answer a trivia question")
 async def trivia(interaction: discord.Interaction):
     r = requests.get("https://opentdb.com/api.php?amount=1&type=multiple")
     data = r.json()["results"][0]
@@ -187,7 +186,8 @@ async def trivia(interaction: discord.Interaction):
             if opt == correct:
                 add_coins(interaction.guild_id, inter2.user.id, 10)
                 add_xp(interaction.guild_id, inter2.user.id, 20)
-                await inter2.response.send_message("Correct! +10 coins +20 XP", ephemeral=True)
+                await inter2.response.send_message(
+                    "Correct! +10 coins +20 XP 🎉", ephemeral=True)
             else:
                 await inter2.response.send_message(
                     f"Wrong! Answer: {correct}", ephemeral=True)
@@ -199,136 +199,36 @@ async def trivia(interaction: discord.Interaction):
     await interaction.response.send_message(question, view=view)
 
 # =========================
-# READY
+# READY EVENT
 # =========================
 
 @client.event
 async def on_ready():
     await tree.sync()
-    print("Bot ready")
+    print(f"Bot ready as {client.user}")
 
 # =========================
-# DASHBOARD (FLASK)
+# FLASK DASHBOARD
 # =========================
 
 app = Flask(__name__)
 
 @app.route("/")
 def dashboard():
-    try:
-        servers = len(client.guilds)
-        users = sum(g.member_count for g in client.guilds if g.member_count)
-        latency = round(client.latency * 1000)
-    except:
-        servers = 0
-        users = 0
-        latency = "..."
+    if not client.is_ready():
+        return "<h1>Bot is starting...</h1>"
+
+    servers = len(client.guilds)
+    users = sum(g.member_count for g in client.guilds if g.member_count)
+    latency = round(client.latency * 1000)
 
     return f"""
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <title>Fun Fact Bot Dashboard</title>
-        <meta http-equiv="refresh" content="15">
-        <style>
-            body {{
-                margin: 0;
-                font-family: Arial, sans-serif;
-                background: #0f1117;
-                color: white;
-                display: flex;
-            }}
-
-            .sidebar {{
-                width: 220px;
-                background: #181c25;
-                padding: 20px;
-                height: 100vh;
-            }}
-
-            .sidebar h2 {{
-                color: #5865F2;
-            }}
-
-            .sidebar a {{
-                display: block;
-                color: white;
-                text-decoration: none;
-                margin: 15px 0;
-                padding: 8px;
-                border-radius: 6px;
-            }}
-
-            .sidebar a:hover {{
-                background: #2a2f3a;
-            }}
-
-            .main {{
-                flex: 1;
-                padding: 40px;
-            }}
-
-            .cards {{
-                display: flex;
-                gap: 20px;
-                flex-wrap: wrap;
-            }}
-
-            .card {{
-                background: #181c25;
-                padding: 30px;
-                border-radius: 12px;
-                width: 220px;
-                box-shadow: 0 0 15px rgba(0,0,0,0.4);
-            }}
-
-            .card h3 {{
-                margin: 0;
-                font-size: 18px;
-                color: #aaa;
-            }}
-
-            .card p {{
-                font-size: 28px;
-                margin-top: 10px;
-                color: #5865F2;
-            }}
-
-        </style>
-    </head>
-
-    <body>
-
-        <div class="sidebar">
-            <h2>Fun Fact Bot</h2>
-            <a href="/">🏠 Dashboard</a>
-            <a href="/leaderboard">🏆 Leaderboard</a>
-        </div>
-
-        <div class="main">
-            <h1>Dashboard Overview</h1>
-            <div class="cards">
-                <div class="card">
-                    <h3>Servers</h3>
-                    <p>{servers}</p>
-                </div>
-
-                <div class="card">
-                    <h3>Users</h3>
-                    <p>{users}</p>
-                </div>
-
-                <div class="card">
-                    <h3>Ping</h3>
-                    <p>{latency} ms</p>
-                </div>
-            </div>
-        </div>
-
-    </body>
-    </html>
+    <h1>Fun Fact Bot Dashboard</h1>
+    <p>Servers: {servers}</p>
+    <p>Users: {users}</p>
+    <p>Ping: {latency} ms</p>
+    <a href="/leaderboard">View Global Leaderboard</a>
     """
-
 
 @app.route("/leaderboard")
 def web_leaderboard():
@@ -338,63 +238,26 @@ def web_leaderboard():
     """)
     rows = cursor.fetchall()
 
-    html_rows = ""
+    text = ""
     for i, (uid, level) in enumerate(rows, 1):
-        html_rows += f"<div class='card'><h3>#{i}</h3><p>User ID {uid}</p><p>Level {level}</p></div>"
+        text += f"<p>#{i} — User ID {uid} — Level {level}</p>"
 
     return f"""
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <title>Leaderboard</title>
-        <style>
-            body {{
-                margin: 0;
-                font-family: Arial;
-                background: #0f1117;
-                color: white;
-                padding: 40px;
-            }}
-
-            .card {{
-                background: #181c25;
-                padding: 20px;
-                margin: 15px 0;
-                border-radius: 12px;
-                box-shadow: 0 0 10px rgba(0,0,0,0.3);
-            }}
-
-            h1 {{
-                color: #5865F2;
-            }}
-
-            a {{
-                color: #5865F2;
-                text-decoration: none;
-            }}
-        </style>
-    </head>
-
-    <body>
-        <h1>Global Leaderboard</h1>
-        {html_rows}
-        <br>
-        <a href="/">⬅ Back to Dashboard</a>
-    </body>
-    </html>
+    <h1>Global Leaderboard</h1>
+    {text}
+    <br>
+    <a href="/">Back</a>
     """
 
 # =========================
-# START DISCORD (for Gunicorn)
+# START DISCORD (Gunicorn Safe)
 # =========================
 
 def start_bot():
     if not TOKEN:
-        print("ERROR: TOKEN missing!")
+        print("TOKEN missing!")
         return
     print("Starting Discord bot...")
     client.run(TOKEN)
 
 threading.Thread(target=start_bot, daemon=True).start()
-
-
