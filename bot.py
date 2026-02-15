@@ -8,7 +8,8 @@ from datetime import datetime, time, timedelta
 
 TOKEN = os.getenv("TOKEN")
 
-GUILD_ID = 1472394773959671912  # <-- PUT YOUR SERVER ID HERE
+# 🔥 PUT YOUR REAL SERVER ID HERE
+GUILD_ID = 1472394773959671912
 
 CONFIG_FILE = "config.json"
 
@@ -27,6 +28,8 @@ if os.path.exists(CONFIG_FILE):
 intents = discord.Intents.default()
 client = discord.Client(intents=intents)
 tree = app_commands.CommandTree(client)
+
+guild = discord.Object(id=GUILD_ID)
 
 def save_config():
     with open(CONFIG_FILE, "w") as f:
@@ -55,13 +58,14 @@ class FactView(discord.ui.View):
     async def another_fact(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.edit_message(embed=create_fact_embed(), view=self)
 
-# ---------- SLASH COMMANDS ----------
+# ---------- SLASH COMMANDS (GUILD SYNCED) ----------
 
-@tree.command(name="fact", description="Get a random fun fact!")
+@tree.command(name="fact", description="Get a random fun fact!", guild=guild)
 async def fact(interaction: discord.Interaction):
     await interaction.response.send_message(embed=create_fact_embed(), view=FactView())
 
-@tree.command(name="settime", description="Set daily fact time (24h format)")
+
+@tree.command(name="settime", description="Set daily fact time (24h format)", guild=guild)
 @app_commands.describe(hour="Hour (0-23)", minute="Minute (0-59)")
 async def settime(interaction: discord.Interaction, hour: int, minute: int):
     if not interaction.user.guild_permissions.administrator:
@@ -74,7 +78,8 @@ async def settime(interaction: discord.Interaction, hour: int, minute: int):
 
     await interaction.response.send_message(f"✅ Daily time set to {hour:02d}:{minute:02d}")
 
-@tree.command(name="setchannel", description="Set channel for daily facts")
+
+@tree.command(name="setchannel", description="Set channel for daily facts", guild=guild)
 async def setchannel(interaction: discord.Interaction, channel: discord.TextChannel):
     if not interaction.user.guild_permissions.administrator:
         await interaction.response.send_message("❌ Admin only.", ephemeral=True)
@@ -98,11 +103,7 @@ async def wait_until_target_time():
 
 @client.event
 async def on_ready():
-    guild = discord.Object(id=GUILD_ID)
-
-    # Force full overwrite of guild commands
     synced = await tree.sync(guild=guild)
-
     print(f"Logged in as {client.user}")
     print(f"Synced {len(synced)} commands.")
 
@@ -112,7 +113,4 @@ async def on_ready():
         await channel.send(embed=create_fact_embed(), view=FactView())
         await asyncio.sleep(60)
 
-
 client.run(TOKEN)
-
-
