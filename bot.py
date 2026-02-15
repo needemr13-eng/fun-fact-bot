@@ -11,8 +11,8 @@ from datetime import datetime
 
 TOKEN = os.getenv("TOKEN")
 
+# ✅ NO privileged intents (no more crashing)
 intents = discord.Intents.default()
-intents.members = True
 client = discord.Client(intents=intents)
 tree = app_commands.CommandTree(client)
 
@@ -105,7 +105,8 @@ async def daily_fact_loop():
 async def on_ready():
     await tree.sync()
     print(f"Logged in as {client.user}")
-    daily_fact_loop.start()
+    if not daily_fact_loop.is_running():
+        daily_fact_loop.start()
 
 # =========================
 # FUN COMMANDS
