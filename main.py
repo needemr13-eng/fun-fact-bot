@@ -291,6 +291,7 @@ def home():
     <html>
     <head>
         <title>Fun Fact Bot</title>
+        <meta http-equiv="refresh" content="10">
     </head>
     <body style="background:#1e1f22;color:white;font-family:Arial;text-align:center;padding-top:100px;">
 
@@ -325,6 +326,7 @@ def run_bot():
 bot_thread = threading.Thread(target=run_bot)
 bot_thread.daemon = True
 bot_thread.start()
+
 
 
 
