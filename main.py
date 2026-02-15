@@ -385,44 +385,16 @@ def web_leaderboard():
     """
 
 # =========================
-# RUN BOT + WEB
+# START DISCORD (for Gunicorn)
 # =========================
 
-def run_bot():
+def start_bot():
     if not TOKEN:
-        print("ERROR: TOKEN is missing!")
-        return
-    print("Starting bot...")
-    client.run(TOKEN)
-
-def run_web():
-    port = int(os.environ.get("PORT", 8080))
-    print("Starting web server on port", port)
-    app.run(host="0.0.0.0", port=port)
-
-if __name__ == "__main__":
-    threading.Thread(target=run_bot, daemon=True).start()
-    run_web()
-
-# =========================
-# RUN BOT + WEB SERVER
-# =========================
-
-def run_bot():
-    if not TOKEN:
-        print("TOKEN IS MISSING!")
+        print("ERROR: TOKEN missing!")
         return
     print("Starting Discord bot...")
     client.run(TOKEN)
 
-def run_web():
-    port = int(os.environ.get("PORT", 8080))
-    print("Starting Flask on port", port)
-    app.run(host="0.0.0.0", port=port)
-
-if __name__ == "__main__":
-    threading.Thread(target=run_bot, daemon=True).start()
-    run_web()
-
+threading.Thread(target=start_bot, daemon=True).start()
 
 
