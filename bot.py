@@ -1,16 +1,19 @@
 import discord
+from discord import app_commands
 import requests
 import asyncio
+import os
 from datetime import datetime, time, timedelta
 
-TOKEN = "MTQ3MjQ0NjA3MjgzOTIxMzIyOQ.GPiu-s.ktYiRCDk706G7oB_WwA1E-516ZMEroLzWLASis"
+TOKEN = os.getenv("MTQ3MjQ0NjA3MjgzOTIxMzIyOQ.GssSvF.nvste9NBEjEHEDkZf8vhHf1gq0orHgDw656JKQ")
 CHANNEL_ID = 1472458985083899975  # your channel id
 
-SEND_HOUR = 12      # change this (24 hour format)
-SEND_MINUTE = 0    # change this
+SEND_HOUR = 7
+SEND_MINUTE = 30
 
 intents = discord.Intents.default()
 client = discord.Client(intents=intents)
+tree = app_commands.CommandTree(client)
 
 def get_fun_fact():
     try:
@@ -18,6 +21,11 @@ def get_fun_fact():
         return r.json()["text"]
     except:
         return "Fun fact machine broke today 🤖"
+
+# ✅ Slash Command
+@tree.command(name="fact", description="Get a random fun fact!")
+async def fact(interaction: discord.Interaction):
+    await interaction.response.send_message(f"🌟 {get_fun_fact()}")
 
 async def wait_until_target_time():
     now = datetime.now()
@@ -31,7 +39,9 @@ async def wait_until_target_time():
 
 @client.event
 async def on_ready():
+    await tree.sync()  # sync slash commands
     print(f"Logged in as {client.user}")
+
     channel = await client.fetch_channel(CHANNEL_ID)
 
     while True:
