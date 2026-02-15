@@ -285,7 +285,8 @@ def get_server_count():
 @app.route("/")
 def home():
     servers = len(client.guilds)
-    latency = round(client.latency * 1000)
+latency = round(client.latency * 1000)
+users = sum(g.member_count for g in client.guilds if g.member_count)
 
     return f"""
     <html>
@@ -307,6 +308,7 @@ def home():
             <p>✅ Online</p>
             <hr style="border:1px solid #3a3c42;">
             <p><b>Servers:</b> {servers}</p>
+            <p><b>Users:</b> {users}</p>
             <p><b>Ping:</b> {latency} ms</p>
         </div>
 
@@ -326,6 +328,7 @@ def run_bot():
 bot_thread = threading.Thread(target=run_bot)
 bot_thread.daemon = True
 bot_thread.start()
+
 
 
 
