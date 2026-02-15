@@ -100,13 +100,11 @@ async def wait_until_target_time():
 async def on_ready():
     guild = discord.Object(id=GUILD_ID)
 
-    # Clear old commands first
-    tree.clear_commands(guild=guild)
-
-    # Re-sync everything fresh
-    await tree.sync(guild=guild)
+    # Force full overwrite of guild commands
+    synced = await tree.sync(guild=guild)
 
     print(f"Logged in as {client.user}")
+    print(f"Synced {len(synced)} commands.")
 
     while True:
         await wait_until_target_time()
@@ -114,5 +112,7 @@ async def on_ready():
         await channel.send(embed=create_fact_embed(), view=FactView())
         await asyncio.sleep(60)
 
+
 client.run(TOKEN)
+
 
