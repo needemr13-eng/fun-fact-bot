@@ -215,183 +215,190 @@ app = Flask(__name__)
 
 @app.route("/")
 def dashboard():
+    return """
+<!DOCTYPE html>
+<html>
+<head>
+<title>Fun Fact Bot Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+body {
+    margin: 0;
+    font-family: 'Inter', sans-serif;
+    background: linear-gradient(135deg, #0f1117, #131722);
+    color: white;
+    display: flex;
+}
+
+/* SIDEBAR */
+.sidebar {
+    width: 240px;
+    background: rgba(20, 22, 32, 0.8);
+    backdrop-filter: blur(15px);
+    padding: 30px;
+    height: 100vh;
+    border-right: 1px solid rgba(255,255,255,0.05);
+}
+
+.logo {
+    font-size: 22px;
+    font-weight: 700;
+    background: linear-gradient(90deg,#5865F2,#9b59ff);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    margin-bottom: 40px;
+}
+
+.sidebar a {
+    display: block;
+    text-decoration: none;
+    color: #aaa;
+    padding: 12px;
+    border-radius: 10px;
+    margin-bottom: 10px;
+    transition: 0.2s;
+}
+
+.sidebar a:hover {
+    background: rgba(88,101,242,0.15);
+    color: white;
+}
+
+/* MAIN */
+.main {
+    flex: 1;
+    padding: 50px;
+}
+
+.topbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 50px;
+}
+
+.status {
+    padding: 8px 18px;
+    border-radius: 20px;
+    background: rgba(0,255,100,0.1);
+    color: #4CAF50;
+    font-weight: 600;
+}
+
+/* CARDS */
+.cards {
+    display: flex;
+    gap: 30px;
+    flex-wrap: wrap;
+}
+
+.card {
+    background: rgba(25,28,40,0.6);
+    backdrop-filter: blur(20px);
+    padding: 35px;
+    border-radius: 20px;
+    width: 260px;
+    position: relative;
+    overflow: hidden;
+    transition: 0.3s;
+    border: 1px solid rgba(255,255,255,0.05);
+}
+
+.card:hover {
+    transform: translateY(-8px);
+    box-shadow: 0 0 40px rgba(88,101,242,0.3);
+}
+
+.card h3 {
+    margin: 0;
+    font-size: 14px;
+    color: #888;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.card p {
+    font-size: 40px;
+    margin-top: 15px;
+    font-weight: 700;
+    background: linear-gradient(90deg,#5865F2,#9b59ff);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+.footer {
+    margin-top: 60px;
+    font-size: 13px;
+    color: #555;
+}
+</style>
+</head>
+
+<body>
+
+<div class="sidebar">
+    <div class="logo">Fun Fact Bot</div>
+    <a href="/">🏠 Dashboard</a>
+    <a href="/leaderboard">🏆 Leaderboard</a>
+</div>
+
+<div class="main">
+    <div class="topbar">
+        <h1>Dashboard Overview</h1>
+        <div class="status">● Online</div>
+    </div>
+
+    <div class="cards">
+        <div class="card">
+            <h3>Servers</h3>
+            <p id="servers">0</p>
+        </div>
+
+        <div class="card">
+            <h3>Total Users</h3>
+            <p id="users">0</p>
+        </div>
+
+        <div class="card">
+            <h3>Latency</h3>
+            <p id="latency">0ms</p>
+        </div>
+    </div>
+
+    <div class="footer">
+        Fun Fact Bot © 2026 — SaaS Mode Activated
+    </div>
+</div>
+
+<script>
+async function updateStats() {
+    const res = await fetch("/stats");
+    const data = await res.json();
+
+    document.getElementById("servers").innerText = data.servers;
+    document.getElementById("users").innerText = data.users;
+    document.getElementById("latency").innerText = data.latency + "ms";
+}
+
+updateStats();
+setInterval(updateStats, 5000);
+</script>
+
+</body>
+</html>
+"""
+
+@app.route("/stats")
+def stats():
     if not client.is_ready():
-        return "<h1 style='color:white;background:#0f1117;padding:50px;'>Bot is starting...</h1>"
+        return {"servers": 0, "users": 0, "latency": 0}
 
-    servers = len(client.guilds)
-    users = sum(g.member_count for g in client.guilds if g.member_count)
-    latency = round(client.latency * 1000)
+    return {
+        "servers": len(client.guilds),
+        "users": sum(g.member_count for g in client.guilds if g.member_count),
+        "latency": round(client.latency * 1000)
+    }
 
-    return f"""
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <title>Fun Fact Bot Dashboard</title>
-        <meta http-equiv="refresh" content="15">
-        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
-        <style>
-            body {{
-                margin: 0;
-                font-family: 'Inter', sans-serif;
-                background: #0f1117;
-                color: white;
-                display: flex;
-            }}
-
-            .sidebar {{
-                width: 250px;
-                background: #151822;
-                height: 100vh;
-                padding: 30px;
-                box-shadow: 5px 0 20px rgba(0,0,0,0.4);
-            }}
-
-            .logo {{
-                font-size: 22px;
-                font-weight: 700;
-                background: linear-gradient(90deg, #5865F2, #9b59ff);
-                -webkit-background-clip: text;
-                -webkit-text-fill-color: transparent;
-                margin-bottom: 40px;
-            }}
-
-            .sidebar a {{
-                display: block;
-                text-decoration: none;
-                color: #aaa;
-                padding: 12px;
-                border-radius: 10px;
-                margin-bottom: 10px;
-                transition: 0.2s;
-            }}
-
-            .sidebar a:hover {{
-                background: #1f2330;
-                color: white;
-            }}
-
-            .main {{
-                flex: 1;
-                padding: 40px;
-            }}
-
-            .topbar {{
-                display: flex;
-                justify-content: space-between;
-                align-items: center;
-                margin-bottom: 40px;
-            }}
-
-            .topbar h1 {{
-                font-size: 28px;
-                margin: 0;
-            }}
-
-            .status {{
-                padding: 8px 15px;
-                background: #1f2330;
-                border-radius: 20px;
-                font-size: 14px;
-                color: #4CAF50;
-            }}
-
-            .cards {{
-                display: flex;
-                gap: 30px;
-                flex-wrap: wrap;
-            }}
-
-            .card {{
-                background: #151822;
-                padding: 30px;
-                border-radius: 18px;
-                width: 260px;
-                box-shadow: 0 0 25px rgba(0,0,0,0.5);
-                transition: 0.25s ease;
-                position: relative;
-                overflow: hidden;
-            }}
-
-            .card::before {{
-                content: "";
-                position: absolute;
-                top: -50%;
-                left: -50%;
-                width: 200%;
-                height: 200%;
-                background: radial-gradient(circle, rgba(88,101,242,0.15) 0%, transparent 60%);
-                transform: rotate(25deg);
-            }}
-
-            .card:hover {{
-                transform: translateY(-8px);
-                box-shadow: 0 0 35px rgba(88,101,242,0.3);
-            }}
-
-            .card h3 {{
-                margin: 0;
-                font-size: 15px;
-                color: #888;
-                letter-spacing: 1px;
-                text-transform: uppercase;
-            }}
-
-            .card p {{
-                font-size: 38px;
-                margin-top: 15px;
-                font-weight: 700;
-                background: linear-gradient(90deg, #5865F2, #9b59ff);
-                -webkit-background-clip: text;
-                -webkit-text-fill-color: transparent;
-            }}
-
-            .footer {{
-                margin-top: 60px;
-                font-size: 13px;
-                color: #555;
-            }}
-        </style>
-    </head>
-
-    <body>
-
-        <div class="sidebar">
-            <div class="logo">Fun Fact Bot</div>
-            <a href="/">🏠 Dashboard</a>
-            <a href="/leaderboard">🏆 Leaderboard</a>
-        </div>
-
-        <div class="main">
-            <div class="topbar">
-                <h1>Dashboard Overview</h1>
-                <div class="status">● Online</div>
-            </div>
-
-            <div class="cards">
-                <div class="card">
-                    <h3>Servers</h3>
-                    <p>{servers}</p>
-                </div>
-
-                <div class="card">
-                    <h3>Total Users</h3>
-                    <p>{users}</p>
-                </div>
-
-                <div class="card">
-                    <h3>Latency</h3>
-                    <p>{latency}ms</p>
-                </div>
-            </div>
-
-            <div class="footer">
-                Fun Fact Bot © 2026 — Powered by Flask + Discord.py
-            </div>
-        </div>
-
-    </body>
-    </html>
-    """
 
 
 
@@ -426,5 +433,6 @@ def start_bot():
     client.run(TOKEN)
 
 threading.Thread(target=start_bot, daemon=True).start()
+
 
 
