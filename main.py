@@ -161,14 +161,36 @@ def dashboard():
 # ------------------------------
 @app.route("/server/<int:guild_id>")
 def server_page(guild_id):
-   if "access_token" not in session:
+
+    # 1️⃣ Make sure user is logged in
+    if "access_token" not in session:
         return redirect("/login")
 
+    access_token = session["access_token"]
+
+    # 2️⃣ Fetch guilds the user can access
+    guilds = requests.get(
+        "https://discord.com/api/users/@me/guilds",
+        headers={"Authorization": f"Bearer {access_token}"}
+    ).json()
+
+    # 3️⃣ Check if user has MANAGE_GUILD permission in this server
+    allowed = False
+    for g in guilds:
+        if int(g["id"]) == guild_id and int(g["permissions"]) & 0x20:
+            allowed = True
+            break
+
+    if not allowed:
+        return "You do not have permission to manage this server."
+
+    # 4️⃣ Make sure bot is actually in the server
     guild = client.get_guild(guild_id)
 
     if not guild:
         return "Bot is not in this server."
 
+    # 5️⃣ Show server dashboard
     return f"""
     <html>
     <body style="background:#0f1117;color:white;font-family:Arial;padding:40px;">
@@ -210,5 +232,6 @@ bot_thread.start()
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8080)
+
 
 
