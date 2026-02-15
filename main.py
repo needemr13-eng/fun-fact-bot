@@ -161,7 +161,7 @@ def dashboard():
 # ------------------------------
 @app.route("/server/<int:guild_id>")
 def server_page(guild_id):
-    if "user" not in session:
+   if "access_token" not in session:
         return redirect("/login")
 
     guild = client.get_guild(guild_id)
@@ -210,4 +210,5 @@ bot_thread.start()
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8080)
+
 
