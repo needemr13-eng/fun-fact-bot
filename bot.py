@@ -5,9 +5,14 @@ import asyncio
 import os
 from datetime import datetime, time, timedelta
 
+# Load token from Railway environment variable
 TOKEN = os.getenv("TOKEN")
-CHANNEL_ID = 1472458985083899975  # your channel id
 
+# YOUR IDs (replace these numbers)
+CHANNEL_ID = 1472458985083899975  # your channel id
+GUILD_ID = 1472394773959671912    # <-- REPLACE with your server id
+
+# Time to send daily message (24-hour format)
 SEND_HOUR = 7
 SEND_MINUTE = 30
 
@@ -22,7 +27,7 @@ def get_fun_fact():
     except:
         return "Fun fact machine broke today 🤖"
 
-# ✅ Slash Command
+# Slash command
 @tree.command(name="fact", description="Get a random fun fact!")
 async def fact(interaction: discord.Interaction):
     await interaction.response.send_message(f"🌟 {get_fun_fact()}")
@@ -39,7 +44,11 @@ async def wait_until_target_time():
 
 @client.event
 async def on_ready():
-    await tree.sync()  # sync slash commands
+    guild = discord.Object(id=GUILD_ID)
+
+    # Sync commands instantly to your server
+    await tree.sync(guild=guild)
+
     print(f"Logged in as {client.user}")
 
     channel = await client.fetch_channel(CHANNEL_ID)
@@ -50,7 +59,3 @@ async def on_ready():
         await asyncio.sleep(60)
 
 client.run(TOKEN)
-
-
-
-
