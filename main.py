@@ -10,55 +10,18 @@ from flask import Flask
 import threading
 
 # =========================
-# FLASK WEB SERVER
+# CONFIG
 # =========================
 
-app = Flask(__name__)
-
-@app.route("/")
-def home():
-    try:
-        servers = len(client.guilds)
-        users = sum(g.member_count for g in client.guilds if g.member_count)
-        latency = round(client.latency * 1000)
-    except:
-        servers = 0
-        users = 0
-        latency = "..."
-
-    return f"""
-    <html>
-    <head>
-        <title>Fun Fact Bot</title>
-        <meta http-equiv="refresh" content="10">
-    </head>
-    <body style="background:#1e1f22;color:white;font-family:Arial;text-align:center;padding-top:100px;">
-        <div style="
-            background:#2b2d31;
-            display:inline-block;
-            padding:40px;
-            border-radius:15px;
-            box-shadow:0 0 20px rgba(0,0,0,0.5);
-            min-width:300px;
-        ">
-            <h1 style="color:#5865F2;">Fun Fact Bot</h1>
-            <p>✅ Online</p>
-            <hr style="border:1px solid #3a3c42;">
-            <p><b>Servers:</b> {servers}</p>
-            <p><b>Users:</b> {users}</p>
-            <p><b>Ping:</b> {latency} ms</p>
-        </div>
-    </body>
-    </html>
-    """
+TOKEN = os.getenv("TOKEN")
 
 # =========================
 # DISCORD SETUP
 # =========================
 
-TOKEN = os.getenv("TOKEN")
-
 intents = discord.Intents.default()
+intents.members = True
+
 client = discord.Client(intents=intents)
 tree = app_commands.CommandTree(client)
 
@@ -66,16 +29,8 @@ tree = app_commands.CommandTree(client)
 # DATABASE
 # =========================
 
-conn = sqlite3.connect("database.db")
+conn = sqlite3.connect("database.db", check_same_thread=False)
 cursor = conn.cursor()
-
-cursor.execute("""
-CREATE TABLE IF NOT EXISTS guild_settings (
-    guild_id INTEGER PRIMARY KEY,
-    level_channel_id INTEGER,
-    levels_enabled INTEGER DEFAULT 1
-)
-""")
 
 cursor.execute("""
 CREATE TABLE IF NOT EXISTS economy (
@@ -84,7 +39,6 @@ CREATE TABLE IF NOT EXISTS economy (
     coins INTEGER DEFAULT 0,
     xp INTEGER DEFAULT 0,
     level INTEGER DEFAULT 1,
-    streak INTEGER DEFAULT 0,
     last_daily TEXT,
     PRIMARY KEY (guild_id, user_id)
 )
@@ -99,9 +53,9 @@ conn.commit()
 def xp_needed(level):
     return int(100 * (level ** 1.5))
 
-def create_xp_bar(current_xp, level):
+def create_bar(current, level):
     needed = xp_needed(level)
-    ratio = min(current_xp / needed, 1)
+    ratio = min(current / needed, 1)
     filled = int(ratio * 10)
     return "▰" * filled + "▱" * (10 - filled)
 
@@ -118,19 +72,19 @@ def add_xp(guild_id, user_id, amount):
                    (guild_id, user_id))
     xp, level = cursor.fetchone()
 
-    leveled_up = False
+    leveled = False
 
     while xp >= xp_needed(level):
         xp -= xp_needed(level)
         level += 1
-        leveled_up = True
+        leveled = True
 
     cursor.execute("""
     UPDATE economy SET xp=?, level=? WHERE guild_id=? AND user_id=?
     """, (xp, level, guild_id, user_id))
     conn.commit()
 
-    return leveled_up, level, xp
+    return leveled, level, xp
 
 def add_coins(guild_id, user_id, amount):
     cursor.execute("""
@@ -142,117 +96,40 @@ def add_coins(guild_id, user_id, amount):
     conn.commit()
 
 # =========================
-# TRIVIA SYSTEM
+# COMMANDS
 # =========================
 
-def get_trivia():
-    try:
-        r = requests.get("https://opentdb.com/api.php?amount=1&type=multiple")
-        data = r.json()["results"][0]
-        question = html.unescape(data["question"])
-        correct = html.unescape(data["correct_answer"])
-        incorrect = [html.unescape(i) for i in data["incorrect_answers"]]
-        options = incorrect + [correct]
-        random.shuffle(options)
-        return question, correct, options
-    except:
-        return None, None, None
-
-@tree.command(name="trivia", description="Start a trivia question!")
-async def trivia(interaction: discord.Interaction):
-    question, correct, options = get_trivia()
-
-    if not question:
-        await interaction.response.send_message("Trivia failed 😭")
-        return
-
-    view = discord.ui.View(timeout=30)
-
-    for option in options:
-        async def callback(interaction2: discord.Interaction, opt=option):
-            if opt == correct:
-                add_coins(interaction.guild_id, interaction2.user.id, 1)
-                leveled, level, xp = add_xp(interaction.guild_id, interaction2.user.id, 15)
-                await interaction2.response.send_message("✅ Correct! +1 coin +15 XP", ephemeral=True)
-
-                if leveled:
-                    await send_level_up(interaction.guild_id, interaction2.user, level, xp)
-            else:
-                await interaction2.response.send_message(
-                    f"❌ Wrong! Correct: {correct}", ephemeral=True)
-
-        button = discord.ui.Button(label=option, style=discord.ButtonStyle.primary)
-        button.callback = callback
-        view.add_item(button)
-
-    await interaction.response.send_message(f"🧠 **Trivia Time!**\n\n{question}", view=view)
-
-# =========================
-# LEVEL UP EMBED
-# =========================
-
-async def send_level_up(guild_id, user, level, xp):
-    cursor.execute("""
-    SELECT level_channel_id, levels_enabled FROM guild_settings WHERE guild_id=?
-    """, (guild_id,))
-    result = cursor.fetchone()
-
-    if not result:
-        return
-
-    channel_id, enabled = result
-    if not enabled or not channel_id:
-        return
-
-    channel = client.get_channel(channel_id)
-    if not channel:
-        return
-
-    bar = create_xp_bar(xp, level)
-
-    embed = discord.Embed(
-        title="🎉 Level Up!",
-        description=f"{user.mention} reached **Level {level}**!",
-        color=discord.Color.gold()
-    )
-    embed.add_field(name="XP Progress", value=bar, inline=False)
-    embed.set_thumbnail(url=user.display_avatar.url)
-
-    await channel.send(embed=embed)
-
-# =========================
-# ECONOMY COMMANDS
-# =========================
-
-@tree.command(name="balance", description="Check your balance and level.")
+@tree.command(name="balance")
 async def balance(interaction: discord.Interaction):
     cursor.execute("""
-    SELECT coins, xp, level FROM economy WHERE guild_id=? AND user_id=?
+    SELECT coins, xp, level FROM economy
+    WHERE guild_id=? AND user_id=?
     """, (interaction.guild_id, interaction.user.id))
     data = cursor.fetchone()
 
     if not data:
-        await interaction.response.send_message("You have nothing yet 😭")
+        await interaction.response.send_message("You have no data yet.")
         return
 
     coins, xp, level = data
-    bar = create_xp_bar(xp, level)
+    bar = create_bar(xp, level)
 
-    embed = discord.Embed(title="💰 Your Stats", color=discord.Color.blue())
+    embed = discord.Embed(title="Your Stats", color=discord.Color.blue())
     embed.add_field(name="Coins", value=str(coins))
     embed.add_field(name="Level", value=str(level))
     embed.add_field(name="XP", value=bar, inline=False)
 
     await interaction.response.send_message(embed=embed)
 
-@tree.command(name="daily", description="Claim daily reward.")
+@tree.command(name="daily")
 async def daily(interaction: discord.Interaction):
+    now = datetime.utcnow()
+
     cursor.execute("""
-    SELECT last_daily FROM economy WHERE guild_id=? AND user_id=?
+    SELECT last_daily FROM economy
+    WHERE guild_id=? AND user_id=?
     """, (interaction.guild_id, interaction.user.id))
     row = cursor.fetchone()
-
-    now = datetime.utcnow()
 
     if row and row[0]:
         last = datetime.fromisoformat(row[0])
@@ -260,42 +137,133 @@ async def daily(interaction: discord.Interaction):
             await interaction.response.send_message("Come back later ⏳")
             return
 
-    add_coins(interaction.guild_id, interaction.user.id, 10)
+    add_coins(interaction.guild_id, interaction.user.id, 25)
 
     cursor.execute("""
     INSERT INTO economy (guild_id, user_id, last_daily)
     VALUES (?, ?, ?)
     ON CONFLICT(guild_id, user_id)
     DO UPDATE SET last_daily=?
-    """, (interaction.guild_id, interaction.user.id, now.isoformat(), now.isoformat()))
+    """, (interaction.guild_id, interaction.user.id,
+          now.isoformat(), now.isoformat()))
     conn.commit()
 
-    await interaction.response.send_message("💰 You received 10 coins!")
+    await interaction.response.send_message("You received 25 coins!")
 
-# =========================
-# ADMIN COMMANDS
-# =========================
-
-@tree.command(name="setlevelchannel", description="Set level-up channel.")
-@app_commands.checks.has_permissions(administrator=True)
-async def setlevelchannel(interaction: discord.Interaction, channel: discord.TextChannel):
+@tree.command(name="leaderboard")
+async def leaderboard(interaction: discord.Interaction):
     cursor.execute("""
-    INSERT INTO guild_settings (guild_id, level_channel_id)
-    VALUES (?, ?)
-    ON CONFLICT(guild_id)
-    DO UPDATE SET level_channel_id=?
-    """, (interaction.guild_id, channel.id, channel.id))
-    conn.commit()
-    await interaction.response.send_message(f"Level-ups will post in {channel.mention}")
+    SELECT user_id, level FROM economy
+    WHERE guild_id=?
+    ORDER BY level DESC LIMIT 10
+    """, (interaction.guild_id,))
+    rows = cursor.fetchall()
+
+    if not rows:
+        await interaction.response.send_message("No data yet.")
+        return
+
+    text = ""
+    for i, (uid, level) in enumerate(rows, 1):
+        user = await client.fetch_user(uid)
+        text += f"{i}. {user.name} — Level {level}\n"
+
+    await interaction.response.send_message(f"🏆 Leaderboard\n\n{text}")
+
+@tree.command(name="trivia")
+async def trivia(interaction: discord.Interaction):
+    r = requests.get("https://opentdb.com/api.php?amount=1&type=multiple")
+    data = r.json()["results"][0]
+
+    question = html.unescape(data["question"])
+    correct = html.unescape(data["correct_answer"])
+    options = [html.unescape(i) for i in data["incorrect_answers"]] + [correct]
+    random.shuffle(options)
+
+    view = discord.ui.View(timeout=30)
+
+    for option in options:
+        async def callback(inter2: discord.Interaction, opt=option):
+            if opt == correct:
+                add_coins(interaction.guild_id, inter2.user.id, 10)
+                add_xp(interaction.guild_id, inter2.user.id, 20)
+                await inter2.response.send_message("Correct! +10 coins +20 XP", ephemeral=True)
+            else:
+                await inter2.response.send_message(
+                    f"Wrong! Answer: {correct}", ephemeral=True)
+
+        btn = discord.ui.Button(label=option)
+        btn.callback = callback
+        view.add_item(btn)
+
+    await interaction.response.send_message(question, view=view)
 
 # =========================
-# READY EVENT
+# READY
 # =========================
 
 @client.event
 async def on_ready():
     await tree.sync()
-    print(f"Logged in as {client.user}")
+    print("Bot ready")
+
+# =========================
+# DASHBOARD (FLASK)
+# =========================
+
+app = Flask(__name__)
+
+@app.route("/")
+def dashboard():
+    try:
+        servers = len(client.guilds)
+        users = sum(g.member_count for g in client.guilds if g.member_count)
+        latency = round(client.latency * 1000)
+    except:
+        servers = 0
+        users = 0
+        latency = "..."
+
+    return f"""
+    <html>
+    <head>
+        <title>Fun Fact Bot Dashboard</title>
+        <meta http-equiv="refresh" content="10">
+    </head>
+    <body style="background:#111;color:white;font-family:Arial;text-align:center;padding-top:50px;">
+        <h1 style="color:#5865F2;">Fun Fact Bot Dashboard</h1>
+        <p>✅ Online</p>
+        <hr style="width:300px;">
+        <p><b>Servers:</b> {servers}</p>
+        <p><b>Users:</b> {users}</p>
+        <p><b>Ping:</b> {latency} ms</p>
+        <br>
+        <a href="/leaderboard" style="color:#5865F2;">View Global Leaderboard</a>
+    </body>
+    </html>
+    """
+
+@app.route("/leaderboard")
+def web_leaderboard():
+    cursor.execute("""
+    SELECT user_id, level FROM economy
+    ORDER BY level DESC LIMIT 10
+    """)
+    rows = cursor.fetchall()
+
+    html_rows = ""
+    for i, (uid, level) in enumerate(rows, 1):
+        html_rows += f"<p>{i}. User ID {uid} — Level {level}</p>"
+
+    return f"""
+    <html>
+    <body style="background:#111;color:white;font-family:Arial;text-align:center;">
+        <h1>Global Leaderboard</h1>
+        {html_rows}
+        <br><a href="/">Back</a>
+    </body>
+    </html>
+    """
 
 # =========================
 # RUN BOT + WEB
@@ -309,7 +277,5 @@ def run_web():
     app.run(host="0.0.0.0", port=port)
 
 if __name__ == "__main__":
-    bot_thread = threading.Thread(target=run_bot)
-    bot_thread.daemon = True
-    bot_thread.start()
+    threading.Thread(target=run_bot, daemon=True).start()
     run_web()
