@@ -127,33 +127,152 @@ def dashboard():
 
     access_token = session["access_token"]
 
+    # Fetch user info
+    user = requests.get(
+        "https://discord.com/api/users/@me",
+        headers={"Authorization": f"Bearer {access_token}"}
+    ).json()
+
+    avatar_url = f"https://cdn.discordapp.com/avatars/{user['id']}/{user['avatar']}.png"
+
+    # Fetch user guilds
     guilds = requests.get(
         "https://discord.com/api/users/@me/guilds",
         headers={"Authorization": f"Bearer {access_token}"}
     ).json()
 
+    bot_guild_ids = [g.id for g in client.guilds]
+
     guild_cards = ""
 
     for g in guilds:
         if int(g["permissions"]) & 0x20:
+
+            icon_url = ""
+            if g["icon"]:
+                icon_url = f"https://cdn.discordapp.com/icons/{g['id']}/{g['icon']}.png"
+            else:
+                icon_url = "https://via.placeholder.com/64"
+
+            if int(g["id"]) in bot_guild_ids:
+                button = f'<a class="manage" href="/server/{g["id"]}">Manage</a>'
+            else:
+                button = f'<a class="add" href="https://discord.com/api/oauth2/authorize?client_id={CLIENT_ID}&scope=bot&permissions=8">Add Bot</a>'
+
             guild_cards += f"""
-            <div style="background:#151822;padding:20px;margin:15px;border-radius:12px;">
+            <div class="card">
+                <img src="{icon_url}" class="icon">
                 <h3>{g['name']}</h3>
-                <a href="/server/{g['id']}" style="color:#5865F2;">Manage</a>
+                {button}
             </div>
             """
 
     return f"""
     <html>
-    <body style="background:#0f1117;color:white;font-family:Arial;padding:40px;">
-        <h1>Welcome {session['username']}</h1>
-        <h2>Your Servers</h2>
+    <head>
+    <title>Dashboard</title>
+    <style>
+    body {{
+        margin:0;
+        font-family:Inter, Arial;
+        background:#0f1117;
+        color:white;
+    }}
+
+    .navbar {{
+        display:flex;
+        justify-content:space-between;
+        align-items:center;
+        padding:20px 40px;
+        background:#151822;
+    }}
+
+    .user {{
+        display:flex;
+        align-items:center;
+        gap:15px;
+    }}
+
+    .avatar {{
+        width:40px;
+        height:40px;
+        border-radius:50%;
+    }}
+
+    .grid {{
+        display:flex;
+        flex-wrap:wrap;
+        gap:25px;
+        padding:40px;
+    }}
+
+    .card {{
+        background:#151822;
+        padding:25px;
+        border-radius:15px;
+        width:220px;
+        text-align:center;
+        transition:0.3s;
+    }}
+
+    .card:hover {{
+        transform:translateY(-5px);
+        box-shadow:0 0 25px rgba(88,101,242,0.3);
+    }}
+
+    .icon {{
+        width:64px;
+        height:64px;
+        border-radius:50%;
+        margin-bottom:15px;
+    }}
+
+    .manage {{
+        display:inline-block;
+        margin-top:10px;
+        padding:8px 16px;
+        background:#5865F2;
+        color:white;
+        text-decoration:none;
+        border-radius:8px;
+    }}
+
+    .add {{
+        display:inline-block;
+        margin-top:10px;
+        padding:8px 16px;
+        background:#43b581;
+        color:white;
+        text-decoration:none;
+        border-radius:8px;
+    }}
+
+    .logout {{
+        color:#ff5555;
+        text-decoration:none;
+    }}
+    </style>
+    </head>
+
+    <body>
+
+    <div class="navbar">
+        <h2>Fun Fact Bot</h2>
+        <div class="user">
+            <span>{user['username']}</span>
+            <img src="{avatar_url}" class="avatar">
+            <a class="logout" href="/logout">Logout</a>
+        </div>
+    </div>
+
+    <div class="grid">
         {guild_cards}
-        <br><br>
-        <a href="/logout" style="color:red;">Logout</a>
+    </div>
+
     </body>
     </html>
     """
+
 
 
 # ------------------------------
@@ -232,6 +351,7 @@ bot_thread.start()
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8080)
+
 
 
 
