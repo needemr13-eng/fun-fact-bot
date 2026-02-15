@@ -284,34 +284,35 @@ def get_server_count():
 
 @app.route("/")
 def home():
-    servers = get_server_count()
-    latency = get_latency()
+    servers = len(client.guilds)
+    latency = round(client.latency * 1000)
 
-   return f"""
-<html>
-<head>
-    <title>Fun Fact Bot</title>
-</head>
-<body style="background:#1e1f22;color:white;font-family:Arial;text-align:center;padding-top:100px;">
+    return f"""
+    <html>
+    <head>
+        <title>Fun Fact Bot</title>
+    </head>
+    <body style="background:#1e1f22;color:white;font-family:Arial;text-align:center;padding-top:100px;">
 
-    <div style="
-        background:#2b2d31;
-        display:inline-block;
-        padding:40px;
-        border-radius:15px;
-        box-shadow:0 0 20px rgba(0,0,0,0.5);
-        min-width:300px;
-    ">
-        <h1 style="color:#5865F2;">Fun Fact Bot</h1>
-        <p>✅ Online</p>
-        <hr style="border:1px solid #3a3c42;">
-        <p><b>Servers:</b> {servers}</p>
-        <p><b>Ping:</b> {latency} ms</p>
-    </div>
+        <div style="
+            background:#2b2d31;
+            display:inline-block;
+            padding:40px;
+            border-radius:15px;
+            box-shadow:0 0 20px rgba(0,0,0,0.5);
+            min-width:300px;
+        ">
+            <h1 style="color:#5865F2;">Fun Fact Bot</h1>
+            <p>✅ Online</p>
+            <hr style="border:1px solid #3a3c42;">
+            <p><b>Servers:</b> {servers}</p>
+            <p><b>Ping:</b> {latency} ms</p>
+        </div>
 
-</body>
-</html>
-"""
+    </body>
+    </html>
+    """
+
 
 
 
@@ -324,6 +325,7 @@ def run_bot():
 bot_thread = threading.Thread(target=run_bot)
 bot_thread.daemon = True
 bot_thread.start()
+
 
 
 
