@@ -216,19 +216,130 @@ app = Flask(__name__)
 @app.route("/")
 def dashboard():
     if not client.is_ready():
-        return "<h1>Bot is starting...</h1>"
+        return "<h1 style='color:white;background:#0f1117;padding:50px;'>Bot is starting...</h1>"
 
     servers = len(client.guilds)
     users = sum(g.member_count for g in client.guilds if g.member_count)
     latency = round(client.latency * 1000)
 
     return f"""
-    <h1>Fun Fact Bot Dashboard</h1>
-    <p>Servers: {servers}</p>
-    <p>Users: {users}</p>
-    <p>Ping: {latency} ms</p>
-    <a href="/leaderboard">View Global Leaderboard</a>
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Fun Fact Bot Dashboard</title>
+        <meta http-equiv="refresh" content="15">
+        <style>
+            body {{
+                margin: 0;
+                font-family: 'Segoe UI', sans-serif;
+                background: #0f1117;
+                color: white;
+                display: flex;
+            }}
+
+            .sidebar {{
+                width: 240px;
+                background: #181c25;
+                height: 100vh;
+                padding: 25px;
+            }}
+
+            .sidebar h2 {{
+                color: #5865F2;
+                margin-bottom: 30px;
+            }}
+
+            .sidebar a {{
+                display: block;
+                color: #ccc;
+                text-decoration: none;
+                padding: 10px;
+                border-radius: 8px;
+                margin-bottom: 10px;
+                transition: 0.2s;
+            }}
+
+            .sidebar a:hover {{
+                background: #2a2f3a;
+                color: white;
+            }}
+
+            .main {{
+                flex: 1;
+                padding: 40px;
+            }}
+
+            .title {{
+                font-size: 28px;
+                margin-bottom: 30px;
+            }}
+
+            .cards {{
+                display: flex;
+                gap: 25px;
+                flex-wrap: wrap;
+            }}
+
+            .card {{
+                background: #181c25;
+                padding: 30px;
+                border-radius: 15px;
+                width: 230px;
+                box-shadow: 0 0 20px rgba(0,0,0,0.4);
+                transition: 0.2s;
+            }}
+
+            .card:hover {{
+                transform: translateY(-5px);
+            }}
+
+            .card h3 {{
+                color: #aaa;
+                margin: 0;
+                font-size: 16px;
+            }}
+
+            .card p {{
+                font-size: 32px;
+                margin-top: 10px;
+                color: #5865F2;
+            }}
+        </style>
+    </head>
+
+    <body>
+
+        <div class="sidebar">
+            <h2>Fun Fact Bot</h2>
+            <a href="/">🏠 Dashboard</a>
+            <a href="/leaderboard">🏆 Leaderboard</a>
+        </div>
+
+        <div class="main">
+            <div class="title">Dashboard Overview</div>
+
+            <div class="cards">
+                <div class="card">
+                    <h3>Servers</h3>
+                    <p>{servers}</p>
+                </div>
+
+                <div class="card">
+                    <h3>Total Users</h3>
+                    <p>{users}</p>
+                </div>
+
+                <div class="card">
+                    <h3>Ping</h3>
+                    <p>{latency} ms</p>
+                </div>
+            </div>
+        </div>
+
+    </body>
+    </html>
     """
+
 
 @app.route("/leaderboard")
 def web_leaderboard():
@@ -261,3 +372,4 @@ def start_bot():
     client.run(TOKEN)
 
 threading.Thread(target=start_bot, daemon=True).start()
+
