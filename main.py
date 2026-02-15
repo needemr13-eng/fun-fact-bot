@@ -284,9 +284,17 @@ def get_server_count():
 
 @app.route("/")
 def home():
+    # Server count
     servers = len(client.guilds)
-    latency = round(client.latency * 1000)
 
+    # Safe latency check (prevents NaN crash)
+    lat = client.latency
+    if lat != lat:  # detects NaN
+        latency = "..."
+    else:
+        latency = round(lat * 1000)
+
+    # Total users across all servers
     users = 0
     for g in client.guilds:
         if g.member_count is not None:
@@ -319,7 +327,6 @@ def home():
     </body>
     </html>
     """
-
 
 
 
