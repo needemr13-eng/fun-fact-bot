@@ -6,6 +6,7 @@ import os
 from datetime import datetime, time, timedelta
 
 TOKEN = os.getenv("MTQ3MjQ0NjA3MjgzOTIxMzIyOQ.GssSvF.nvste9NBEjEHEDkZf8vhHf1gq0orHgDw656JKQ")
+print("TOKEN VALUE:", TOKEN)
 CHANNEL_ID = 1472458985083899975  # your channel id
 
 SEND_HOUR = 7
@@ -50,3 +51,4 @@ async def on_ready():
         await asyncio.sleep(60)
 
 client.run(TOKEN)
+
