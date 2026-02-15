@@ -271,4 +271,24 @@ async def on_ready():
     await tree.sync()
     print(f"Logged in as {client.user}")
 
-client.run(TOKEN)
+import threading
+from flask import Flask
+
+app = Flask(__name__)
+
+@app.route("/")
+def home():
+    return "<h1>Bot Dashboard Running 🚀</h1>"
+
+def run_bot():
+    client.run(TOKEN)
+
+def run_web():
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port)
+
+if __name__ == "__main__":
+    threading.Thread(target=run_bot).start()
+    run_web()
+
+
