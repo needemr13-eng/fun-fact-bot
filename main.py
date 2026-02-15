@@ -1,13 +1,60 @@
 import discord
 from discord import app_commands
-from discord.ext import tasks
 import requests
 import os
 import sqlite3
 import random
 import html
 from datetime import datetime, timedelta
-import math
+from flask import Flask
+import threading
+
+# =========================
+# FLASK WEB SERVER
+# =========================
+
+app = Flask(__name__)
+
+@app.route("/")
+def home():
+    try:
+        servers = len(client.guilds)
+        users = sum(g.member_count for g in client.guilds if g.member_count)
+        latency = round(client.latency * 1000)
+    except:
+        servers = 0
+        users = 0
+        latency = "..."
+
+    return f"""
+    <html>
+    <head>
+        <title>Fun Fact Bot</title>
+        <meta http-equiv="refresh" content="10">
+    </head>
+    <body style="background:#1e1f22;color:white;font-family:Arial;text-align:center;padding-top:100px;">
+        <div style="
+            background:#2b2d31;
+            display:inline-block;
+            padding:40px;
+            border-radius:15px;
+            box-shadow:0 0 20px rgba(0,0,0,0.5);
+            min-width:300px;
+        ">
+            <h1 style="color:#5865F2;">Fun Fact Bot</h1>
+            <p>✅ Online</p>
+            <hr style="border:1px solid #3a3c42;">
+            <p><b>Servers:</b> {servers}</p>
+            <p><b>Users:</b> {users}</p>
+            <p><b>Ping:</b> {latency} ms</p>
+        </div>
+    </body>
+    </html>
+    """
+
+# =========================
+# DISCORD SETUP
+# =========================
 
 TOKEN = os.getenv("TOKEN")
 
@@ -25,10 +72,6 @@ cursor = conn.cursor()
 cursor.execute("""
 CREATE TABLE IF NOT EXISTS guild_settings (
     guild_id INTEGER PRIMARY KEY,
-    channel_id INTEGER,
-    hour INTEGER DEFAULT 7,
-    minute INTEGER DEFAULT 30,
-    enabled INTEGER DEFAULT 0,
     level_channel_id INTEGER,
     levels_enabled INTEGER DEFAULT 1
 )
@@ -99,7 +142,7 @@ def add_coins(guild_id, user_id, amount):
     conn.commit()
 
 # =========================
-# TRIVIA
+# TRIVIA SYSTEM
 # =========================
 
 def get_trivia():
@@ -130,7 +173,6 @@ async def trivia(interaction: discord.Interaction):
             if opt == correct:
                 add_coins(interaction.guild_id, interaction2.user.id, 1)
                 leveled, level, xp = add_xp(interaction.guild_id, interaction2.user.id, 15)
-
                 await interaction2.response.send_message("✅ Correct! +1 coin +15 XP", ephemeral=True)
 
                 if leveled:
@@ -173,7 +215,7 @@ async def send_level_up(guild_id, user, level, xp):
         description=f"{user.mention} reached **Level {level}**!",
         color=discord.Color.gold()
     )
-    embed.add_field(name="XP Progress", value=f"{bar}", inline=False)
+    embed.add_field(name="XP Progress", value=bar, inline=False)
     embed.set_thumbnail(url=user.display_avatar.url)
 
     await channel.send(embed=embed)
@@ -231,7 +273,7 @@ async def daily(interaction: discord.Interaction):
     await interaction.response.send_message("💰 You received 10 coins!")
 
 # =========================
-# ADMIN LEVEL SETTINGS
+# ADMIN COMMANDS
 # =========================
 
 @tree.command(name="setlevelchannel", description="Set level-up channel.")
@@ -246,63 +288,18 @@ async def setlevelchannel(interaction: discord.Interaction, channel: discord.Tex
     conn.commit()
     await interaction.response.send_message(f"Level-ups will post in {channel.mention}")
 
-@tree.command(name="togglelevels", description="Enable/Disable level messages.")
-@app_commands.checks.has_permissions(administrator=True)
-async def togglelevels(interaction: discord.Interaction):
-    cursor.execute("SELECT levels_enabled FROM guild_settings WHERE guild_id=?",
-                   (interaction.guild_id,))
-    row = cursor.fetchone()
+# =========================
+# READY EVENT
+# =========================
 
-    new_value = 0 if row and row[0] == 1 else 1
+@client.event
+async def on_ready():
+    await tree.sync()
+    print(f"Logged in as {client.user}")
 
-    cursor.execute("""
-    INSERT INTO guild_settings (guild_id, levels_enabled)
-    VALUES (?, ?)
-    ON CONFLICT(guild_id)
-    DO UPDATE SET levels_enabled=?
-    """, (interaction.guild_id, new_value, new_value))
-    conn.commit()
-
-
-
-@app.route("/")
-def home():
-    try:
-        servers = len(client.guilds)
-        users = sum(g.member_count for g in client.guilds if g.member_count)
-        latency = round(client.latency * 1000)
-    except:
-        servers = 0
-        users = 0
-        latency = "..."
-
-    return f"""
-    <html>
-    <head>
-        <title>Fun Fact Bot</title>
-        <meta http-equiv="refresh" content="10">
-    </head>
-    <body style="background:#1e1f22;color:white;font-family:Arial;text-align:center;padding-top:100px;">
-        <div style="
-            background:#2b2d31;
-            display:inline-block;
-            padding:40px;
-            border-radius:15px;
-            box-shadow:0 0 20px rgba(0,0,0,0.5);
-            min-width:300px;
-        ">
-            <h1 style="color:#5865F2;">Fun Fact Bot</h1>
-            <p>✅ Online</p>
-            <hr style="border:1px solid #3a3c42;">
-            <p><b>Servers:</b> {servers}</p>
-            <p><b>Users:</b> {users}</p>
-            <p><b>Ping:</b> {latency} ms</p>
-        </div>
-    </body>
-    </html>
-    """
-
-import threading
+# =========================
+# RUN BOT + WEB
+# =========================
 
 def run_bot():
     client.run(TOKEN)
@@ -315,20 +312,4 @@ if __name__ == "__main__":
     bot_thread = threading.Thread(target=run_bot)
     bot_thread.daemon = True
     bot_thread.start()
-
     run_web()
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
