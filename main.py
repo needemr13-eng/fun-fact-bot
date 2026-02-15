@@ -278,17 +278,38 @@ app = Flask(__name__)
 
 @app.route("/")
 def home():
-    return "<h1>Bot Dashboard Running 🚀</h1>"
-
-def run_bot():
-    client.run(TOKEN)
-
-def run_web():
-    port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port)
-
-if __name__ == "__main__":
-    threading.Thread(target=run_bot).start()
-    run_web()
+    return """
+    <html>
+    <head>
+        <title>Fun Fact Bot</title>
+        <style>
+            body {
+                background-color: #1e1f22;
+                color: white;
+                font-family: Arial, sans-serif;
+                text-align: center;
+                padding-top: 100px;
+            }
+            .card {
+                background: #2b2d31;
+                padding: 40px;
+                border-radius: 15px;
+                display: inline-block;
+                box-shadow: 0px 0px 20px rgba(0,0,0,0.5);
+            }
+            h1 {
+                color: #5865F2;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="card">
+            <h1>Fun Fact Bot Dashboard</h1>
+            <p>Bot Status: ✅ Online</p>
+            <p>Hosted on Railway</p>
+        </div>
+    </body>
+    </html>
+    """
 
 
