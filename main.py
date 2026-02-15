@@ -339,7 +339,8 @@ body {
 <div class="sidebar">
     <div class="logo">Fun Fact Bot</div>
     <a href="/">🏠 Dashboard</a>
-    <a href="/leaderboard">🏆 Leaderboard</a>
+  <a href="/servers">🖥 Servers</a>
+<a href="/leaderboard">🏆 Leaderboard</a>
 </div>
 
 <div class="main">
@@ -434,5 +435,119 @@ def start_bot():
 
 threading.Thread(target=start_bot, daemon=True).start()
 
+
+@app.route("/servers")
+def servers():
+    if not client.is_ready():
+        return "Bot is starting..."
+
+    server_cards = ""
+
+    for guild in client.guilds:
+        server_cards += f"""
+        <div class="card">
+            <h3>{guild.name}</h3>
+            <p>{guild.member_count} Members</p>
+            <a class="btn" href="/server/{guild.id}">Manage</a>
+        </div>
+        """
+
+    return f"""
+    <html>
+    <head>
+    <title>Servers</title>
+    <style>
+    body {{
+        background:#0f1117;
+        color:white;
+        font-family:Inter,sans-serif;
+        padding:50px;
+    }}
+    .grid {{
+        display:flex;
+        gap:25px;
+        flex-wrap:wrap;
+    }}
+    .card {{
+        background:#151822;
+        padding:25px;
+        border-radius:15px;
+        width:250px;
+    }}
+    .btn {{
+        display:inline-block;
+        margin-top:10px;
+        padding:8px 15px;
+        background:#5865F2;
+        color:white;
+        text-decoration:none;
+        border-radius:8px;
+    }}
+    </style>
+    </head>
+    <body>
+        <h1>Your Servers</h1>
+        <div class="grid">
+            {server_cards}
+        </div>
+    </body>
+    </html>
+    """
+
+
+@app.route("/server/<int:guild_id>")
+def server_dashboard(guild_id):
+    guild = client.get_guild(guild_id)
+
+    if not guild:
+        return "Server not found"
+
+    members = guild.member_count
+    channels = len(guild.channels)
+    roles = len(guild.roles)
+
+    return f"""
+    <html>
+    <head>
+    <title>{guild.name}</title>
+    <style>
+    body {{
+        background:#0f1117;
+        color:white;
+        font-family:Inter,sans-serif;
+        padding:50px;
+    }}
+    .card {{
+        background:#151822;
+        padding:30px;
+        border-radius:18px;
+        width:300px;
+        margin-bottom:20px;
+    }}
+    </style>
+    </head>
+    <body>
+        <h1>{guild.name}</h1>
+
+        <div class="card">
+            <h3>Members</h3>
+            <p>{members}</p>
+        </div>
+
+        <div class="card">
+            <h3>Channels</h3>
+            <p>{channels}</p>
+        </div>
+
+        <div class="card">
+            <h3>Roles</h3>
+            <p>{roles}</p>
+        </div>
+
+        <br>
+        <a href="/servers" style="color:#5865F2;">← Back to servers</a>
+    </body>
+    </html>
+    """
 
 
