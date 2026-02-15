@@ -1,23 +1,23 @@
+import os
+import threading
 import discord
 from discord import app_commands
+from flask import Flask, redirect, request, session
 import requests
-import os
-import sqlite3
-import random
-import html
-from datetime import datetime, timedelta
-from flask import Flask
-import threading
+import urllib.parse
 
-# =========================
+# ==============================
 # CONFIG
-# =========================
+# ==============================
 
 TOKEN = os.getenv("TOKEN")
+CLIENT_ID = os.getenv("CLIENT_ID")
+CLIENT_SECRET = os.getenv("CLIENT_SECRET")
+REDIRECT_URI = os.getenv("REDIRECT_URI")
 
-# =========================
-# DISCORD SETUP
-# =========================
+# ==============================
+# DISCORD BOT SETUP
+# ==============================
 
 intents = discord.Intents.default()
 intents.members = True
@@ -26,528 +26,187 @@ intents.message_content = True
 client = discord.Client(intents=intents)
 tree = app_commands.CommandTree(client)
 
-# =========================
-# DATABASE
-# =========================
-
-conn = sqlite3.connect("database.db", check_same_thread=False)
-cursor = conn.cursor()
-
-cursor.execute("""
-CREATE TABLE IF NOT EXISTS economy (
-    guild_id INTEGER,
-    user_id INTEGER,
-    coins INTEGER DEFAULT 0,
-    xp INTEGER DEFAULT 0,
-    level INTEGER DEFAULT 1,
-    last_daily TEXT,
-    PRIMARY KEY (guild_id, user_id)
-)
-""")
-conn.commit()
-
-# =========================
-# XP SYSTEM
-# =========================
-
-def xp_needed(level):
-    return int(100 * (level ** 1.5))
-
-def create_bar(current, level):
-    needed = xp_needed(level)
-    ratio = min(current / needed, 1)
-    filled = int(ratio * 10)
-    return "▰" * filled + "▱" * (10 - filled)
-
-def add_xp(guild_id, user_id, amount):
-    cursor.execute("""
-    INSERT INTO economy (guild_id, user_id, xp)
-    VALUES (?, ?, ?)
-    ON CONFLICT(guild_id, user_id)
-    DO UPDATE SET xp = xp + ?
-    """, (guild_id, user_id, amount, amount))
-    conn.commit()
-
-    cursor.execute("SELECT xp, level FROM economy WHERE guild_id=? AND user_id=?",
-                   (guild_id, user_id))
-    xp, level = cursor.fetchone()
-
-    leveled = False
-    while xp >= xp_needed(level):
-        xp -= xp_needed(level)
-        level += 1
-        leveled = True
-
-    cursor.execute("""
-    UPDATE economy SET xp=?, level=? WHERE guild_id=? AND user_id=?
-    """, (xp, level, guild_id, user_id))
-    conn.commit()
-
-    return leveled, level, xp
-
-def add_coins(guild_id, user_id, amount):
-    cursor.execute("""
-    INSERT INTO economy (guild_id, user_id, coins)
-    VALUES (?, ?, ?)
-    ON CONFLICT(guild_id, user_id)
-    DO UPDATE SET coins = coins + ?
-    """, (guild_id, user_id, amount, amount))
-    conn.commit()
-
-# =========================
-# SLASH COMMANDS
-# =========================
-
-@tree.command(name="balance", description="Check your balance and XP")
-async def balance(interaction: discord.Interaction):
-    cursor.execute("""
-    SELECT coins, xp, level FROM economy
-    WHERE guild_id=? AND user_id=?
-    """, (interaction.guild_id, interaction.user.id))
-    data = cursor.fetchone()
-
-    if not data:
-        await interaction.response.send_message("You have no data yet.")
-        return
-
-    coins, xp, level = data
-    bar = create_bar(xp, level)
-
-    embed = discord.Embed(title="Your Stats", color=discord.Color.blurple())
-    embed.add_field(name="Coins", value=str(coins))
-    embed.add_field(name="Level", value=str(level))
-    embed.add_field(name="XP Progress", value=bar, inline=False)
-
-    await interaction.response.send_message(embed=embed)
-
-@tree.command(name="daily", description="Claim daily coins")
-async def daily(interaction: discord.Interaction):
-    now = datetime.utcnow()
-
-    cursor.execute("""
-    SELECT last_daily FROM economy
-    WHERE guild_id=? AND user_id=?
-    """, (interaction.guild_id, interaction.user.id))
-    row = cursor.fetchone()
-
-    if row and row[0]:
-        last = datetime.fromisoformat(row[0])
-        if now - last < timedelta(hours=24):
-            await interaction.response.send_message("Come back later ⏳")
-            return
-
-    add_coins(interaction.guild_id, interaction.user.id, 25)
-
-    cursor.execute("""
-    INSERT INTO economy (guild_id, user_id, last_daily)
-    VALUES (?, ?, ?)
-    ON CONFLICT(guild_id, user_id)
-    DO UPDATE SET last_daily=?
-    """, (interaction.guild_id, interaction.user.id,
-          now.isoformat(), now.isoformat()))
-    conn.commit()
-
-    await interaction.response.send_message("You received 25 coins! 💰")
-
-@tree.command(name="leaderboard", description="Server leaderboard")
-async def leaderboard(interaction: discord.Interaction):
-    cursor.execute("""
-    SELECT user_id, level FROM economy
-    WHERE guild_id=?
-    ORDER BY level DESC LIMIT 10
-    """, (interaction.guild_id,))
-    rows = cursor.fetchall()
-
-    if not rows:
-        await interaction.response.send_message("No data yet.")
-        return
-
-    text = ""
-    for i, (uid, level) in enumerate(rows, 1):
-        user = await client.fetch_user(uid)
-        text += f"{i}. {user.name} — Level {level}\n"
-
-    await interaction.response.send_message(f"🏆 Server Leaderboard\n\n{text}")
-
-@tree.command(name="trivia", description="Answer a trivia question")
-async def trivia(interaction: discord.Interaction):
-    r = requests.get("https://opentdb.com/api.php?amount=1&type=multiple")
-    data = r.json()["results"][0]
-
-    question = html.unescape(data["question"])
-    correct = html.unescape(data["correct_answer"])
-    options = [html.unescape(i) for i in data["incorrect_answers"]] + [correct]
-    random.shuffle(options)
-
-    view = discord.ui.View(timeout=30)
-
-    for option in options:
-        async def callback(inter2: discord.Interaction, opt=option):
-            if opt == correct:
-                add_coins(interaction.guild_id, inter2.user.id, 10)
-                add_xp(interaction.guild_id, inter2.user.id, 20)
-                await inter2.response.send_message(
-                    "Correct! +10 coins +20 XP 🎉", ephemeral=True)
-            else:
-                await inter2.response.send_message(
-                    f"Wrong! Answer: {correct}", ephemeral=True)
-
-        btn = discord.ui.Button(label=option)
-        btn.callback = callback
-        view.add_item(btn)
-
-    await interaction.response.send_message(question, view=view)
-
-# =========================
-# READY EVENT
-# =========================
-
 @client.event
 async def on_ready():
     await tree.sync()
-    print(f"Bot ready as {client.user}")
+    print(f"Logged in as {client.user}")
 
-# =========================
-# FLASK DASHBOARD
-# =========================
+# Example Slash Command
+@tree.command(name="ping", description="Check bot latency")
+async def ping(interaction: discord.Interaction):
+    latency = round(client.latency * 1000)
+    await interaction.response.send_message(f"Pong! {latency}ms")
+
+# ==============================
+# FLASK APP
+# ==============================
 
 app = Flask(__name__)
+app.secret_key = CLIENT_SECRET
 
+
+# ------------------------------
+# Landing Page
+# ------------------------------
 @app.route("/")
-def dashboard():
+def home():
     return """
-<!DOCTYPE html>
-<html>
-<head>
-<title>Fun Fact Bot Dashboard</title>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
-<style>
-body {
-    margin: 0;
-    font-family: 'Inter', sans-serif;
-    background: linear-gradient(135deg, #0f1117, #131722);
-    color: white;
-    display: flex;
-}
-
-/* SIDEBAR */
-.sidebar {
-    width: 240px;
-    background: rgba(20, 22, 32, 0.8);
-    backdrop-filter: blur(15px);
-    padding: 30px;
-    height: 100vh;
-    border-right: 1px solid rgba(255,255,255,0.05);
-}
-
-.logo {
-    font-size: 22px;
-    font-weight: 700;
-    background: linear-gradient(90deg,#5865F2,#9b59ff);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    margin-bottom: 40px;
-}
-
-.sidebar a {
-    display: block;
-    text-decoration: none;
-    color: #aaa;
-    padding: 12px;
-    border-radius: 10px;
-    margin-bottom: 10px;
-    transition: 0.2s;
-}
-
-.sidebar a:hover {
-    background: rgba(88,101,242,0.15);
-    color: white;
-}
-
-/* MAIN */
-.main {
-    flex: 1;
-    padding: 50px;
-}
-
-.topbar {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 50px;
-}
-
-.status {
-    padding: 8px 18px;
-    border-radius: 20px;
-    background: rgba(0,255,100,0.1);
-    color: #4CAF50;
-    font-weight: 600;
-}
-
-/* CARDS */
-.cards {
-    display: flex;
-    gap: 30px;
-    flex-wrap: wrap;
-}
-
-.card {
-    background: rgba(25,28,40,0.6);
-    backdrop-filter: blur(20px);
-    padding: 35px;
-    border-radius: 20px;
-    width: 260px;
-    position: relative;
-    overflow: hidden;
-    transition: 0.3s;
-    border: 1px solid rgba(255,255,255,0.05);
-}
-
-.card:hover {
-    transform: translateY(-8px);
-    box-shadow: 0 0 40px rgba(88,101,242,0.3);
-}
-
-.card h3 {
-    margin: 0;
-    font-size: 14px;
-    color: #888;
-    text-transform: uppercase;
-    letter-spacing: 1px;
-}
-
-.card p {
-    font-size: 40px;
-    margin-top: 15px;
-    font-weight: 700;
-    background: linear-gradient(90deg,#5865F2,#9b59ff);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-}
-
-.footer {
-    margin-top: 60px;
-    font-size: 13px;
-    color: #555;
-}
-</style>
-</head>
-
-<body>
-
-<div class="sidebar">
-    <div class="logo">Fun Fact Bot</div>
-    <a href="/">🏠 Dashboard</a>
-  <a href="/servers">🖥 Servers</a>
-<a href="/leaderboard">🏆 Leaderboard</a>
-</div>
-
-<div class="main">
-    <div class="topbar">
-        <h1>Dashboard Overview</h1>
-        <div class="status">● Online</div>
-    </div>
-
-    <div class="cards">
-        <div class="card">
-            <h3>Servers</h3>
-            <p id="servers">0</p>
-        </div>
-
-        <div class="card">
-            <h3>Total Users</h3>
-            <p id="users">0</p>
-        </div>
-
-        <div class="card">
-            <h3>Latency</h3>
-            <p id="latency">0ms</p>
-        </div>
-    </div>
-
-    <div class="footer">
-        Fun Fact Bot © 2026 — SaaS Mode Activated
-    </div>
-</div>
-
-<script>
-async function updateStats() {
-    const res = await fetch("/stats");
-    const data = await res.json();
-
-    document.getElementById("servers").innerText = data.servers;
-    document.getElementById("users").innerText = data.users;
-    document.getElementById("latency").innerText = data.latency + "ms";
-}
-
-updateStats();
-setInterval(updateStats, 5000);
-</script>
-
-</body>
-</html>
-"""
-
-@app.route("/stats")
-def stats():
-    if not client.is_ready():
-        return {"servers": 0, "users": 0, "latency": 0}
-
-    return {
-        "servers": len(client.guilds),
-        "users": sum(g.member_count for g in client.guilds if g.member_count),
-        "latency": round(client.latency * 1000)
-    }
-
-
-
-
-@app.route("/leaderboard")
-def web_leaderboard():
-    cursor.execute("""
-    SELECT user_id, level FROM economy
-    ORDER BY level DESC LIMIT 10
-    """)
-    rows = cursor.fetchall()
-
-    text = ""
-    for i, (uid, level) in enumerate(rows, 1):
-        text += f"<p>#{i} — User ID {uid} — Level {level}</p>"
-
-    return f"""
-    <h1>Global Leaderboard</h1>
-    {text}
-    <br>
-    <a href="/">Back</a>
-    """
-
-# =========================
-# START DISCORD (Gunicorn Safe)
-# =========================
-
-def start_bot():
-    if not TOKEN:
-        print("TOKEN missing!")
-        return
-    print("Starting Discord bot...")
-    client.run(TOKEN)
-
-threading.Thread(target=start_bot, daemon=True).start()
-
-
-@app.route("/servers")
-def servers():
-    if not client.is_ready():
-        return "Bot is starting..."
-
-    server_cards = ""
-
-    for guild in client.guilds:
-        server_cards += f"""
-        <div class="card">
-            <h3>{guild.name}</h3>
-            <p>{guild.member_count} Members</p>
-            <a class="btn" href="/server/{guild.id}">Manage</a>
-        </div>
-        """
-
-    return f"""
     <html>
-    <head>
-    <title>Servers</title>
-    <style>
-    body {{
-        background:#0f1117;
-        color:white;
-        font-family:Inter,sans-serif;
-        padding:50px;
-    }}
-    .grid {{
-        display:flex;
-        gap:25px;
-        flex-wrap:wrap;
-    }}
-    .card {{
-        background:#151822;
-        padding:25px;
-        border-radius:15px;
-        width:250px;
-    }}
-    .btn {{
-        display:inline-block;
-        margin-top:10px;
-        padding:8px 15px;
-        background:#5865F2;
-        color:white;
-        text-decoration:none;
-        border-radius:8px;
-    }}
-    </style>
-    </head>
-    <body>
-        <h1>Your Servers</h1>
-        <div class="grid">
-            {server_cards}
-        </div>
+    <body style="background:#0f1117;color:white;font-family:Arial;text-align:center;padding:100px;">
+        <h1>Fun Fact Bot</h1>
+        <p>Modern Discord XP & Economy Bot</p>
+        <a href="/login" style="padding:12px 25px;background:#5865F2;color:white;text-decoration:none;border-radius:8px;">
+        Login with Discord
+        </a>
     </body>
     </html>
     """
 
 
+# ------------------------------
+# LOGIN
+# ------------------------------
+@app.route("/login")
+def login():
+    scope = "identify guilds"
+    params = {
+        "client_id": CLIENT_ID,
+        "redirect_uri": REDIRECT_URI,
+        "response_type": "code",
+        "scope": scope
+    }
+
+    url = "https://discord.com/api/oauth2/authorize?" + urllib.parse.urlencode(params)
+    return redirect(url)
+
+
+# ------------------------------
+# CALLBACK
+# ------------------------------
+@app.route("/callback")
+def callback():
+    code = request.args.get("code")
+
+    data = {
+        "client_id": CLIENT_ID,
+        "client_secret": CLIENT_SECRET,
+        "grant_type": "authorization_code",
+        "code": code,
+        "redirect_uri": REDIRECT_URI
+    }
+
+    headers = {
+        "Content-Type": "application/x-www-form-urlencoded"
+    }
+
+    r = requests.post("https://discord.com/api/oauth2/token", data=data, headers=headers)
+    token_json = r.json()
+
+    access_token = token_json.get("access_token")
+
+    user = requests.get(
+        "https://discord.com/api/users/@me",
+        headers={"Authorization": f"Bearer {access_token}"}
+    ).json()
+
+    guilds = requests.get(
+        "https://discord.com/api/users/@me/guilds",
+        headers={"Authorization": f"Bearer {access_token}"}
+    ).json()
+
+    session["user"] = user
+    session["guilds"] = guilds
+
+    return redirect("/dashboard")
+
+
+# ------------------------------
+# DASHBOARD (Protected)
+# ------------------------------
+@app.route("/dashboard")
+def dashboard():
+    if "user" not in session:
+        return redirect("/login")
+
+    user = session["user"]
+    guilds = session["guilds"]
+
+    guild_cards = ""
+
+    for g in guilds:
+        # MANAGE_GUILD permission
+        if int(g["permissions"]) & 0x20:
+            guild_cards += f"""
+            <div style="background:#151822;padding:20px;margin:15px;border-radius:12px;">
+                <h3>{g['name']}</h3>
+                <a href="/server/{g['id']}" style="color:#5865F2;">Manage</a>
+            </div>
+            """
+
+    return f"""
+    <html>
+    <body style="background:#0f1117;color:white;font-family:Arial;padding:40px;">
+        <h1>Welcome {user['username']}</h1>
+        <h2>Your Servers</h2>
+        {guild_cards}
+        <br><br>
+        <a href="/logout" style="color:red;">Logout</a>
+    </body>
+    </html>
+    """
+
+
+# ------------------------------
+# PER SERVER PAGE
+# ------------------------------
 @app.route("/server/<int:guild_id>")
-def server_dashboard(guild_id):
+def server_page(guild_id):
+    if "user" not in session:
+        return redirect("/login")
+
     guild = client.get_guild(guild_id)
 
     if not guild:
-        return "Server not found"
-
-    members = guild.member_count
-    channels = len(guild.channels)
-    roles = len(guild.roles)
+        return "Bot is not in this server."
 
     return f"""
     <html>
-    <head>
-    <title>{guild.name}</title>
-    <style>
-    body {{
-        background:#0f1117;
-        color:white;
-        font-family:Inter,sans-serif;
-        padding:50px;
-    }}
-    .card {{
-        background:#151822;
-        padding:30px;
-        border-radius:18px;
-        width:300px;
-        margin-bottom:20px;
-    }}
-    </style>
-    </head>
-    <body>
+    <body style="background:#0f1117;color:white;font-family:Arial;padding:40px;">
         <h1>{guild.name}</h1>
-
-        <div class="card">
-            <h3>Members</h3>
-            <p>{members}</p>
-        </div>
-
-        <div class="card">
-            <h3>Channels</h3>
-            <p>{channels}</p>
-        </div>
-
-        <div class="card">
-            <h3>Roles</h3>
-            <p>{roles}</p>
-        </div>
-
+        <p>Members: {guild.member_count}</p>
+        <p>Channels: {len(guild.channels)}</p>
+        <p>Roles: {len(guild.roles)}</p>
         <br>
-        <a href="/servers" style="color:#5865F2;">← Back to servers</a>
+        <a href="/dashboard" style="color:#5865F2;">← Back</a>
     </body>
     </html>
     """
 
 
+# ------------------------------
+# LOGOUT
+# ------------------------------
+@app.route("/logout")
+def logout():
+    session.clear()
+    return redirect("/")
+
+
+# ------------------------------
+# START BOT IN THREAD
+# ------------------------------
+def run_bot():
+    client.run(TOKEN)
+
+
+bot_thread = threading.Thread(target=run_bot)
+bot_thread.daemon = True
+bot_thread.start()
+
+
+# ==============================
+# RUN FLASK (Railway uses gunicorn)
+# ==============================
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=8080)
